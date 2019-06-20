@@ -1,11 +1,11 @@
 package readability
 
 import (
-	nurl "net/url"
+	"net/url"
 	"os"
 	"strings"
+	"task_test/3d/assert"
 
-	"github.com/sirupsen/logrus"
 	"golang.org/x/net/html"
 )
 
@@ -28,7 +28,7 @@ func wordCount(str string) int {
 
 // toAbsoluteURI convert uri to absolute path based on base.
 // However, if uri is prefixed with hash (#), the uri won't be changed.
-func toAbsoluteURI(uri string, base *nurl.URL) string {
+func toAbsoluteURI(uri string, base *url.URL) string {
 	if uri == "" || base == nil {
 		return ""
 	}
@@ -39,13 +39,13 @@ func toAbsoluteURI(uri string, base *nurl.URL) string {
 	}
 
 	// If it is already an absolute URL, return as it is
-	tmp, err := nurl.ParseRequestURI(uri)
+	tmp, err := url.ParseRequestURI(uri)
 	if err == nil && tmp.Scheme != "" && tmp.Hostname() != "" {
 		return uri
 	}
 
 	// Otherwise, resolve against base URI.
-	tmp, err = nurl.Parse(uri)
+	tmp, err = url.Parse(uri)
 	if err != nil {
 		return uri
 	}
@@ -57,9 +57,8 @@ func toAbsoluteURI(uri string, base *nurl.URL) string {
 // It will panic if it fails to create destination file.
 func renderToFile(element *html.Node, filename string) {
 	dstFile, err := os.Create(filename)
-	if err != nil {
-		logrus.Fatalln("failed to create file:", err)
-	}
-	defer dstFile.Close()
-	html.Render(dstFile, element)
+	assert.ErrWrap(err, "failed to create file")
+
+	defer assert.Throw(dstFile.Close())
+	assert.Throw(html.Render(dstFile, element))
 }

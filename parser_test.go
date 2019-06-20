@@ -1,11 +1,11 @@
 package readability
 
 import (
-	"fmt"
 	"io/ioutil"
 	"os"
 	fp "path/filepath"
 	"strings"
+	"task_test/3d/assert"
 	"testing"
 
 	"github.com/sergi/go-diff/diffmatchpatch"
@@ -21,14 +21,12 @@ func getNodeExcerpt(node *html.Node) string {
 	return outer[:120]
 }
 
-func compareArticleContent(result, expected *html.Node) error {
+func compareArticleContent(result, expected *html.Node) {
 	// Make sure number of nodes is same
 	resultNodesCount := len(children(result))
 	expectedNodesCount := len(children(expected))
-	if resultNodesCount != expectedNodesCount {
-		return fmt.Errorf("number of nodes is different, want %d got %d",
-			expectedNodesCount, resultNodesCount)
-	}
+	assert.T(resultNodesCount != expectedNodesCount, "number of nodes is different, want %d got %d",
+		expectedNodesCount, resultNodesCount)
 
 	resultNode := result
 	expectedNode := expected
@@ -40,24 +38,20 @@ func compareArticleContent(result, expected *html.Node) error {
 		// Compare tag name
 		resultTagName := tagName(resultNode)
 		expectedTagName := tagName(expectedNode)
-		if resultTagName != expectedTagName {
-			return fmt.Errorf("tag name is different\n"+
-				"want    : %s (%s)\n"+
-				"got     : %s (%s)",
-				expectedTagName, expectedExcerpt,
-				resultTagName, resultExcerpt)
-		}
+		assert.T(resultTagName != expectedTagName, "tag name is different\n"+
+			"want    : %s (%s)\n"+
+			"got     : %s (%s)",
+			expectedTagName, expectedExcerpt,
+			resultTagName, resultExcerpt)
 
 		// Compare attributes
 		resultAttrCount := len(resultNode.Attr)
 		expectedAttrCount := len(expectedNode.Attr)
-		if resultAttrCount != expectedAttrCount {
-			return fmt.Errorf("number of attributes is different\n"+
-				"want    : %d (%s)\n"+
-				"got     : %d (%s)",
-				expectedAttrCount, expectedExcerpt,
-				resultAttrCount, resultExcerpt)
-		}
+		assert.T(resultAttrCount != expectedAttrCount, "number of attributes is different\n"+
+			"want    : %d (%s)\n"+
+			"got     : %d (%s)",
+			expectedAttrCount, expectedExcerpt,
+			resultAttrCount, resultExcerpt)
 
 		for _, resultAttr := range resultNode.Attr {
 			expectedAttrVal := getAttribute(expectedNode, resultAttr.Key)
@@ -67,13 +61,11 @@ func compareArticleContent(result, expected *html.Node) error {
 				expectedAttrVal = strings.TrimSuffix(expectedAttrVal, "/")
 			}
 
-			if resultAttr.Val != expectedAttrVal {
-				return fmt.Errorf("attribute %s is different\n"+
-					"want    : %s (%s)\n"+
-					"got     : %s (%s)",
-					resultAttr.Key, expectedAttrVal, expectedExcerpt,
-					resultAttr.Val, resultExcerpt)
-			}
+			assert.T(resultAttr.Val != expectedAttrVal, "attribute %s is different\n"+
+				"want    : %s (%s)\n"+
+				"got     : %s (%s)",
+				resultAttr.Key, expectedAttrVal, expectedExcerpt,
+				resultAttr.Val, resultExcerpt)
 		}
 
 		// Compare text content
@@ -86,22 +78,18 @@ func compareArticleContent(result, expected *html.Node) error {
 		comparator := diffmatchpatch.New()
 		diffs := comparator.DiffMain(resultText, expectedText, false)
 
-		if len(diffs) > 1 {
-			return fmt.Errorf("text content is different\n"+
-				"want  : %s\n"+
-				"got   : %s\n"+
-				"diffs : %s",
-				expectedExcerpt, resultExcerpt,
-				comparator.DiffPrettyText(diffs))
-		}
+		assert.T(len(diffs) > 1, "text content is different\n"+
+			"want  : %s\n"+
+			"got   : %s\n"+
+			"diffs : %s",
+			expectedExcerpt, resultExcerpt,
+			comparator.DiffPrettyText(diffs))
 
 		// Move to next node
 		ps := Parser{}
 		resultNode = ps.getNextNode(resultNode, false)
 		expectedNode = ps.getNextNode(expectedNode, false)
 	}
-
-	return nil
 }
 
 func Test_parser(t *testing.T) {
@@ -123,39 +111,28 @@ func Test_parser(t *testing.T) {
 			if err != nil {
 				t1.Errorf("\nfailed to open test file")
 			}
-			defer testFile.Close()
+			defer assert.Throw(testFile.Close())
 
 			// Open expected result file
 			expectedFilePath := fp.Join(testDir, item.Name(), "expected.html")
 			expectedFile, err := os.Open(expectedFilePath)
-			if err != nil {
-				t1.Errorf("\nfailed to open expected result file")
-			}
-			defer expectedFile.Close()
+			assert.ErrWrap(err, "failed to open expected result file")
+
+			defer assert.Throw(expectedFile.Close())
 
 			// Parse expected result
 			expectedHTML, err := html.Parse(expectedFile)
-			if err != nil {
-				t1.Errorf("\nfailed to parse expected result file")
-			}
+			assert.ErrWrap(err, "failed to parse expected result file")
 
 			// Get article from test file
-			resultArticle, err := FromReader(testFile, "http://fakehost/test/page.html")
-			if err != nil {
-				t1.Errorf("\nfailed to parse test file")
-			}
+			resultArticle := FromReader(testFile, "http://fakehost/test/page.html")
 
 			// Parse article into HTML
 			resultHTML, err := html.Parse(strings.NewReader(resultArticle.Content))
-			if err != nil {
-				t1.Errorf("\nfailed to parse test article into HTML")
-			}
+			assert.ErrWrap(err, "failed to parse test article into HTML")
 
 			// Compare article
-			err = compareArticleContent(resultHTML, expectedHTML)
-			if err != nil {
-				t1.Errorf("\n%v", err)
-			}
+			compareArticleContent(resultHTML, expectedHTML)
 		})
 	}
 }

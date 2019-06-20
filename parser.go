@@ -2,10 +2,11 @@ package readability
 
 import (
 	"fmt"
+	"github.com/pubgo/assert"
 	shtml "html"
 	"io"
 	"math"
-	nurl "net/url"
+	"net/url"
 	"regexp"
 	"sort"
 	"strconv"
@@ -105,7 +106,7 @@ type Parser struct {
 	Debug bool
 
 	doc             *html.Node
-	documentURI     *nurl.URL
+	documentURI     *url.URL
 	articleTitle    string
 	articleByline   string
 	articleDir      string
@@ -1669,7 +1670,7 @@ func (ps *Parser) isProbablyVisible(node *html.Node) bool {
 }
 
 // Parse parses input and find the main readable content.
-func (ps *Parser) Parse(input io.Reader, pageURL string) (Article, error) {
+func (ps *Parser) Parse(input io.Reader, pageURL string) Article {
 	// Reset parser data
 	ps.articleTitle = ""
 	ps.articleByline = ""
@@ -1684,23 +1685,17 @@ func (ps *Parser) Parse(input io.Reader, pageURL string) (Article, error) {
 
 	// Parse page url
 	var err error
-	ps.documentURI, err = nurl.ParseRequestURI(pageURL)
-	if err != nil {
-		return Article{}, fmt.Errorf("failed to parse URL: %v", err)
-	}
+	ps.documentURI, err = url.ParseRequestURI(pageURL)
+	assert.ErrWrap(err, "failed to parse URL")
 
 	// Parse input
 	ps.doc, err = html.Parse(input)
-	if err != nil {
-		return Article{}, fmt.Errorf("failed to parse input: %v", err)
-	}
+	assert.ErrWrap(err, "failed to parse input")
 
 	// Avoid parsing too large documents, as per configuration option
 	if ps.MaxElemsToParse > 0 {
 		numTags := len(getElementsByTagName(ps.doc, "*"))
-		if numTags > ps.MaxElemsToParse {
-			return Article{}, fmt.Errorf("documents too large: %d elements", numTags)
-		}
+		assert.T(numTags > ps.MaxElemsToParse, "documents too large: %d elements", numTags)
 	}
 
 	// Remove script tags from the document.
@@ -1759,7 +1754,7 @@ func (ps *Parser) Parse(input io.Reader, pageURL string) (Article, error) {
 		SiteName:    metadata["siteName"],
 		Image:       metadata["image"],
 		Favicon:     metadata["favicon"],
-	}, nil
+	}
 }
 
 // IsReadable decides whether or not the document is reader-able

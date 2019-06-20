@@ -1,4 +1,4 @@
-package main
+package cmds
 
 import (
 	"bytes"
@@ -15,23 +15,18 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func main() {
-	rootCmd := &cobra.Command{
-		Use:   "go-readability [flags] source",
-		Args:  cobra.ExactArgs(1),
-		Run:   rootCmdHandler,
-		Short: "go-readability is parser to fetch readable content of a web page",
-		Long: "go-readability is parser to fetch the readable content of a web page.\n" +
-			"The source can be an url or an existing file in your storage.",
-	}
-
-	rootCmd.Flags().BoolP("metadata", "m", false, "only print the page's metadata")
-
-	err := rootCmd.Execute()
-	if err != nil {
-		log.Fatalln(err)
-	}
+func initGoReadabilityCmd(cmd *cobra.Command) *cobra.Command {
+	return cmd
 }
+
+var GoReadabilityCmd = initGoReadabilityCmd(&cobra.Command{
+	Use:   "go-readability [flags] source",
+	Args:  cobra.ExactArgs(1),
+	Run:   rootCmdHandler,
+	Short: "go-readability is parser to fetch readable content of a web page",
+	Long: "go-readability is parser to fetch the readable content of a web page.\n" +
+		"The source can be an url or an existing file in your storage.",
+})
 
 func rootCmdHandler(cmd *cobra.Command, args []string) {
 	// Get cmd parameter
