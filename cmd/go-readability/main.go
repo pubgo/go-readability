@@ -11,7 +11,7 @@ import (
 	"os"
 	"strings"
 
-	readability "github.com/go-shiori/go-readability"
+	"github.com/pubgo/go-readability"
 	"github.com/spf13/cobra"
 )
 

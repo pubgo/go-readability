@@ -2,6 +2,7 @@ package readability
 
 import (
 	"fmt"
+	shtml "html"
 	"io"
 	"math"
 	nurl "net/url"
@@ -40,6 +41,8 @@ var (
 	rxSentencePeriod       = regexp.MustCompile(`(?i)\.( |$)`)
 	rxShare                = regexp.MustCompile(`(?i)share`)
 	rxFaviconSize          = regexp.MustCompile(`(?i)(\d+)x(\d+)`)
+	rxLazyImageSrcset      = regexp.MustCompile(`(?i)\.(jpg|jpeg|png|webp)\s+\d`)
+	rxLazyImageSrc         = regexp.MustCompile(`(?i)^\s*\S+\.(jpg|jpeg|png|webp)\S*\s*$`)
 )
 
 // Constants that used by readability.
@@ -455,6 +458,8 @@ func (ps *Parser) prepArticle(articleContent *html.Node) {
 	// though they're visually linked to other content-ful elements
 	// (text, images, etc.).
 	ps.markDataTables(articleContent)
+
+	ps.fixLazyImages(articleContent)
 
 	// Clean out junk from the article content
 	ps.cleanConditionally(articleContent, "form")
@@ -1206,6 +1211,10 @@ func (ps *Parser) getArticleMetadata() map[string]string {
 	// get favicon
 	metadataFavicon := ps.getArticleFavicon()
 
+	// in some sites, excerpt is used with HTML encoding,
+	// so here we unescape it.
+	metadataExcerpt = shtml.UnescapeString(metadataExcerpt)
+
 	return map[string]string{
 		"title":    metadataTitle,
 		"byline":   metadataByline,
@@ -1509,6 +1518,50 @@ func (ps *Parser) markDataTables(root *html.Node) {
 	}
 }
 
+// fixLazyImages convert images and figures that have properties like data-src into
+// images that can be loaded without JS.
+func (ps *Parser) fixLazyImages(root *html.Node) {
+	imageNodes := ps.getAllNodesWithTag(root, "img", "picture", "figure")
+	ps.forEachNode(imageNodes, func(elem *html.Node, _ int) {
+		src := getAttribute(elem, "src")
+		srcset := getAttribute(elem, "srcset")
+		nodeTag := tagName(elem)
+		nodeClass := className(elem)
+
+		if (src == "" && srcset == "") || strings.Contains(strings.ToLower(nodeClass), "lazy") {
+			for i := 0; i < len(elem.Attr); i++ {
+				attr := elem.Attr[i]
+				if attr.Key == "src" || attr.Key == "srcset" {
+					continue
+				}
+
+				copyTo := ""
+				if rxLazyImageSrcset.MatchString(attr.Val) {
+					copyTo = "srcset"
+				} else if rxLazyImageSrc.MatchString(attr.Val) {
+					copyTo = "src"
+				}
+
+				if copyTo == "" {
+					continue
+				}
+
+				if nodeTag == "img" || nodeTag == "picture" {
+					// if this is an img or picture, set the attribute directly
+					setAttribute(elem, copyTo, attr.Val)
+				} else if nodeTag == "figure" && len(ps.getAllNodesWithTag(elem, "img", "picture")) == 0 {
+					// if the item is a <figure> that does not contain an image or picture,
+					// create one and place it inside the figure see the nytimes-3
+					// testcase for an example
+					img := createElement("img")
+					setAttribute(img, copyTo, attr.Val)
+					appendChild(elem, img)
+				}
+			}
+		}
+	})
+}
+
 // cleanConditionally cleans an element of all tags of type "tag" if
 // they look fishy. "Fishy" is an algorithm based on content length,
 // classnames, link density, number of images & embeds, etc.
@@ -1690,6 +1743,11 @@ func (ps *Parser) Parse(input io.Reader, pageURL string) (Article, error) {
 		finalByline = ps.articleByline
 	}
 
+	// Excerpt is an supposed to be short and concise,
+	// so it shouldn't have any new line
+	excerpt := strings.TrimSpace(metadata["excerpt"])
+	excerpt = strings.Join(strings.Fields(excerpt), " ")
+
 	return Article{
 		Title:       ps.articleTitle,
 		Byline:      finalByline,
@@ -1697,7 +1755,7 @@ func (ps *Parser) Parse(input io.Reader, pageURL string) (Article, error) {
 		Content:     finalHTMLContent,
 		TextContent: finalTextContent,
 		Length:      len(finalTextContent),
-		Excerpt:     metadata["excerpt"],
+		Excerpt:     excerpt,
 		SiteName:    metadata["siteName"],
 		Image:       metadata["image"],
 		Favicon:     metadata["favicon"],
