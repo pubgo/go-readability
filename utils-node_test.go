@@ -1,7 +1,7 @@
 package readability
 
 import (
-	"fmt"
+	"github.com/pubgo/assert"
 	"os"
 	"strings"
 	"testing"
@@ -9,26 +9,21 @@ import (
 	"golang.org/x/net/html"
 )
 
-func openTestFile(path string) (*html.Node, error) {
+func openTestFile(path string) *html.Node {
+	defer assert.Panic("openTestFile")
+
 	testFile, err := os.Open(path)
-	if err != nil {
-		return nil, fmt.Errorf("failed to open test file: %v", err)
-	}
-	defer testFile.Close()
+	assert.ErrWrap(err, "failed to open test file")
+	defer assert.Throw(testFile.Close())
 
 	doc, err := html.Parse(testFile)
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse test file: %v", err)
-	}
+	assert.ErrWrap(err, "failed to parse test file")
 
-	return doc, nil
+	return doc
 }
 
 func Test_getElementsByTagName(t *testing.T) {
-	doc, err := openTestFile("test-pages/nodes.html")
-	if err != nil {
-		t.Error(err)
-	}
+	doc := openTestFile("test-pages/nodes.html")
 
 	html := doc.FirstChild
 	body := html.FirstChild.NextSibling

@@ -1,11 +1,11 @@
 package readability
 
 import (
+	"github.com/pubgo/assert"
 	"io/ioutil"
 	"os"
 	fp "path/filepath"
 	"strings"
-	"task_test/3d/assert"
 	"testing"
 
 	"github.com/sergi/go-diff/diffmatchpatch"
@@ -22,6 +22,8 @@ func getNodeExcerpt(node *html.Node) string {
 }
 
 func compareArticleContent(result, expected *html.Node) {
+	defer assert.Panic("compareArticleContent")
+
 	// Make sure number of nodes is same
 	resultNodesCount := len(children(result))
 	expectedNodesCount := len(children(expected))

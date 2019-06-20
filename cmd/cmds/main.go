@@ -4,10 +4,10 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"github.com/pubgo/assert"
 	"io"
-	"log"
 	"net/http"
-	nurl "net/url"
+	"net/url"
 	"os"
 	"strings"
 
@@ -41,19 +41,15 @@ func rootCmdHandler(cmd *cobra.Command, args []string) {
 
 	if isURL(srcPath) {
 		resp, err := http.Get(srcPath)
-		if err != nil {
-			log.Fatalln("failed to fetch web page:", err)
-		}
-		defer resp.Body.Close()
+		assert.ErrWrap(err, "failed to fetch web page")
+		defer assert.Throw(resp.Body.Close())
 
 		pageURL = srcPath
 		srcReader = resp.Body
 	} else {
 		srcFile, err := os.Open(srcPath)
-		if err != nil {
-			log.Fatalln("failed to open source file:", err)
-		}
-		defer srcFile.Close()
+		assert.ErrWrap(err, "failed to open source file")
+		defer assert.Throw(srcFile.Close())
 
 		pageURL = "http://fakehost.com"
 		srcReader = srcFile
@@ -64,15 +60,10 @@ func rootCmdHandler(cmd *cobra.Command, args []string) {
 	tee := io.TeeReader(srcReader, buf)
 
 	// Make sure the page is readable
-	if !readability.IsReadable(tee) {
-		log.Fatalln("failed to parse page: the page is not readable")
-	}
+	assert.T(!readability.IsReadable(tee), "failed to parse page: the page is not readable")
 
 	// Get readable content from the reader
-	article, err := readability.FromReader(buf, pageURL)
-	if err != nil {
-		log.Fatalln("failed to parse page:", err)
-	}
+	article := readability.FromReader(buf, pageURL)
 
 	// Print the article (or its metadata) to stdout
 	if metadataOnly {
@@ -85,9 +76,7 @@ func rootCmdHandler(cmd *cobra.Command, args []string) {
 		}
 
 		prettyJSON, err := json.MarshalIndent(&metadata, "", "    ")
-		if err != nil {
-			log.Fatalln("failed to write metadata file:", err)
-		}
+		assert.ErrWrap(err, "failed to write metadata file")
 
 		fmt.Println(string(prettyJSON))
 		return
@@ -97,6 +86,6 @@ func rootCmdHandler(cmd *cobra.Command, args []string) {
 }
 
 func isURL(path string) bool {
-	url, err := nurl.ParseRequestURI(path)
-	return err == nil && strings.HasPrefix(url.Scheme, "http")
+	_url, err := url.ParseRequestURI(path)
+	return err == nil && strings.HasPrefix(_url.Scheme, "http")
 }

@@ -1,10 +1,10 @@
 package readability
 
 import (
+	"github.com/pubgo/assert"
 	"net/url"
 	"os"
 	"strings"
-	"task_test/3d/assert"
 
 	"golang.org/x/net/html"
 )
@@ -29,6 +29,8 @@ func wordCount(str string) int {
 // toAbsoluteURI convert uri to absolute path based on base.
 // However, if uri is prefixed with hash (#), the uri won't be changed.
 func toAbsoluteURI(uri string, base *url.URL) string {
+	defer assert.Panic("toAbsoluteURI")
+
 	if uri == "" || base == nil {
 		return ""
 	}
@@ -46,9 +48,7 @@ func toAbsoluteURI(uri string, base *url.URL) string {
 
 	// Otherwise, resolve against base URI.
 	tmp, err = url.Parse(uri)
-	if err != nil {
-		return uri
-	}
+	assert.ErrWrap(err, "url parse error,url(%s)", uri)
 
 	return base.ResolveReference(tmp).String()
 }
@@ -56,9 +56,12 @@ func toAbsoluteURI(uri string, base *url.URL) string {
 // renderToFile ender an element and save it to file.
 // It will panic if it fails to create destination file.
 func renderToFile(element *html.Node, filename string) {
+	defer assert.Panic("renderToFile")
+
 	dstFile, err := os.Create(filename)
 	assert.ErrWrap(err, "failed to create file")
 
 	defer assert.Throw(dstFile.Close())
+
 	assert.Throw(html.Render(dstFile, element))
 }
