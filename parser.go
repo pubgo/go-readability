@@ -2,7 +2,7 @@ package readability
 
 import (
 	"fmt"
-	"github.com/pubgo/assert"
+	"github.com/pubgo/errors"
 	shtml "html"
 	"io"
 	"math"
@@ -1686,16 +1686,16 @@ func (ps *Parser) Parse(input io.Reader, pageURL string) Article {
 	// Parse page url
 	var err error
 	ps.documentURI, err = url.ParseRequestURI(pageURL)
-	assert.ErrWrap(err, "failed to parse URL")
+	errors.Wrap(err, "failed to parse URL")
 
 	// Parse input
 	ps.doc, err = html.Parse(input)
-	assert.ErrWrap(err, "failed to parse input")
+	errors.Wrap(err, "failed to parse input")
 
 	// Avoid parsing too large documents, as per configuration option
 	if ps.MaxElemsToParse > 0 {
 		numTags := len(getElementsByTagName(ps.doc, "*"))
-		assert.T(numTags > ps.MaxElemsToParse, "documents too large: %d elements", numTags)
+		errors.T(numTags > ps.MaxElemsToParse, "documents too large: %d elements", numTags)
 	}
 
 	// Remove script tags from the document.

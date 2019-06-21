@@ -1,7 +1,7 @@
 package readability
 
 import (
-	"github.com/pubgo/assert"
+	"github.com/pubgo/errors"
 	"net/url"
 	"os"
 	"strings"
@@ -29,7 +29,7 @@ func wordCount(str string) int {
 // toAbsoluteURI convert uri to absolute path based on base.
 // However, if uri is prefixed with hash (#), the uri won't be changed.
 func toAbsoluteURI(uri string, base *url.URL) string {
-	defer assert.Panic("toAbsoluteURI")
+	defer errors.Handle()
 
 	if uri == "" || base == nil {
 		return ""
@@ -48,7 +48,7 @@ func toAbsoluteURI(uri string, base *url.URL) string {
 
 	// Otherwise, resolve against base URI.
 	tmp, err = url.Parse(uri)
-	assert.ErrWrap(err, "url parse error,url(%s)", uri)
+	errors.Wrap(err, "url parse error,url(%s)", uri)
 
 	return base.ResolveReference(tmp).String()
 }
@@ -56,12 +56,12 @@ func toAbsoluteURI(uri string, base *url.URL) string {
 // renderToFile ender an element and save it to file.
 // It will panic if it fails to create destination file.
 func renderToFile(element *html.Node, filename string) {
-	defer assert.Panic("renderToFile")
+	defer errors.Handle()
 
 	dstFile, err := os.Create(filename)
-	assert.ErrWrap(err, "failed to create file")
+	errors.Wrap(err, "failed to create file")
 
-	defer assert.Throw(dstFile.Close())
+	defer errors.Panic(dstFile.Close())
 
-	assert.Throw(html.Render(dstFile, element))
+	errors.Panic(html.Render(dstFile, element))
 }

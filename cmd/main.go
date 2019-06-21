@@ -1,7 +1,7 @@
 package main
 
 import (
-	"github.com/pubgo/assert"
+	"github.com/pubgo/errors"
 	"github.com/pubgo/go-readability/cmd/cmds"
 	"os"
 )
@@ -12,7 +12,7 @@ func main() {
 		cmds.GoReadabilityCmd,
 	)
 
-	assert.ErrHandle(rootCmd.Execute(), func(err *assert.KErr) {
+	errors.ErrHandle(rootCmd.Execute(), func(err *errors.Err) {
 		err.P()
 		os.Exit(-1)
 	})

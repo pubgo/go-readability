@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"github.com/pubgo/assert"
+	"github.com/pubgo/errors"
 	"io"
 	"net/http"
 	"net/url"
@@ -41,15 +41,15 @@ func rootCmdHandler(cmd *cobra.Command, args []string) {
 
 	if isURL(srcPath) {
 		resp, err := http.Get(srcPath)
-		assert.ErrWrap(err, "failed to fetch web page")
-		defer assert.Throw(resp.Body.Close())
+		errors.Wrap(err, "failed to fetch web page")
+		defer errors.Panic(resp.Body.Close())
 
 		pageURL = srcPath
 		srcReader = resp.Body
 	} else {
 		srcFile, err := os.Open(srcPath)
-		assert.ErrWrap(err, "failed to open source file")
-		defer assert.Throw(srcFile.Close())
+		errors.Wrap(err, "failed to open source file")
+		defer errors.Panic(srcFile.Close())
 
 		pageURL = "http://fakehost.com"
 		srcReader = srcFile
@@ -60,7 +60,7 @@ func rootCmdHandler(cmd *cobra.Command, args []string) {
 	tee := io.TeeReader(srcReader, buf)
 
 	// Make sure the page is readable
-	assert.T(!readability.IsReadable(tee), "failed to parse page: the page is not readable")
+	errors.T(!readability.IsReadable(tee), "failed to parse page: the page is not readable")
 
 	// Get readable content from the reader
 	article := readability.FromReader(buf, pageURL)
@@ -76,7 +76,7 @@ func rootCmdHandler(cmd *cobra.Command, args []string) {
 		}
 
 		prettyJSON, err := json.MarshalIndent(&metadata, "", "    ")
-		assert.ErrWrap(err, "failed to write metadata file")
+		errors.Wrap(err, "failed to write metadata file")
 
 		fmt.Println(string(prettyJSON))
 		return

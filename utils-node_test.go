@@ -1,7 +1,7 @@
 package readability
 
 import (
-	"github.com/pubgo/assert"
+	"github.com/pubgo/errors"
 	"os"
 	"strings"
 	"testing"
@@ -10,14 +10,14 @@ import (
 )
 
 func openTestFile(path string) *html.Node {
-	defer assert.Panic("openTestFile")
+	defer errors.Handle()
 
 	testFile, err := os.Open(path)
-	assert.ErrWrap(err, "failed to open test file")
-	defer assert.Throw(testFile.Close())
+	errors.Wrap(err, "failed to open test file")
+	defer errors.Panic(testFile.Close())
 
 	doc, err := html.Parse(testFile)
-	assert.ErrWrap(err, "failed to parse test file")
+	errors.Wrap(err, "failed to parse test file")
 
 	return doc
 }
@@ -415,10 +415,7 @@ func Test_class(t *testing.T) {
 }
 
 func Test_children(t *testing.T) {
-	doc, err := openTestFile("test-pages/nodes.html")
-	if err != nil {
-		t.Error(err)
-	}
+	doc := openTestFile("test-pages/nodes.html")
 
 	body := getElementsByTagName(doc, "body")[0]
 	nChildElements := len(children(body))
@@ -433,10 +430,7 @@ func Test_children(t *testing.T) {
 }
 
 func Test_childNodes(t *testing.T) {
-	doc, err := openTestFile("test-pages/nodes.html")
-	if err != nil {
-		t.Error(err)
-	}
+	doc := openTestFile("test-pages/nodes.html")
 
 	body := getElementsByTagName(doc, "body")[0]
 	nChildNodes := len(childNodes(body))
@@ -577,10 +571,7 @@ func Test_replaceNode(t *testing.T) {
 }
 
 func Test_includeNode(t *testing.T) {
-	doc, err := openTestFile("test-pages/nodes.html")
-	if err != nil {
-		t.Error(err)
-	}
+	doc := openTestFile("test-pages/nodes.html")
 
 	body := getElementsByTagName(doc, "body")[0]
 	allElements := getElementsByTagName(body, "*")
