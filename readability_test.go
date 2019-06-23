@@ -35,6 +35,7 @@ func TestFromURL(t *testing.T) {
 
 func TestFromReader(t *testing.T) {
 	defer errors.Debug()
+
 	readability.Cfg.Debug = false
 
 	// 开始性能分析, 返回一个停止接口

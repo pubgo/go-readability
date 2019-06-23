@@ -6,6 +6,4 @@ import (
 
 var RootCmd = &cobra.Command{
 	Use: "app",
-	PersistentPreRun: func(cmd *cobra.Command, args []string) {
-	},
 }

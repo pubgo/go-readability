@@ -13,6 +13,8 @@ import (
 )
 
 func getNodeExcerpt(node *html.Node) string {
+	defer errors.Handle(func() {})
+
 	outer := outerHTML(node)
 	outer = strings.Join(strings.Fields(outer), " ")
 	if len(outer) < 120 {

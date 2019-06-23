@@ -49,6 +49,8 @@ func Test_getElementsByTagName(t *testing.T) {
 }
 
 func Test_createElement(t *testing.T) {
+	defer errors.Debug()
+
 	scenarios := map[string]string{
 		"h1":  "<h1></h1>",
 		"h2":  "<h2></h2>",
@@ -70,6 +72,8 @@ func Test_createElement(t *testing.T) {
 }
 
 func Test_createTextNode(t *testing.T) {
+	defer errors.Debug()
+
 	scenarios := []string{
 		"hello world",
 		"this is awesome",
@@ -88,6 +92,8 @@ func Test_createTextNode(t *testing.T) {
 }
 
 func Test_tagName(t *testing.T) {
+	defer errors.Debug()
+
 	scenarios := map[string]string{
 		"this is only ordinary text":               "",
 		"<h1>Hello</h1>":                           "h1",
@@ -117,6 +123,8 @@ func Test_tagName(t *testing.T) {
 }
 
 func Test_getAttribute(t *testing.T) {
+	defer errors.Debug()
+
 	scenarios := map[string]string{
 		`<p data-test="trying to"></p>`:              "trying to",
 		`<ul data-test="make a dream"></p>`:          "make a dream",
@@ -147,6 +155,8 @@ func Test_getAttribute(t *testing.T) {
 }
 
 func Test_setAttribute(t *testing.T) {
+	defer errors.Debug()
+
 	type setAttributeTest struct {
 		name     string
 		value    string
@@ -182,6 +192,8 @@ func Test_setAttribute(t *testing.T) {
 }
 
 func Test_removeAttribute(t *testing.T) {
+	defer errors.Debug()
+
 	type rmAttributeTest struct {
 		origin      string
 		removedAttr string
@@ -226,6 +238,8 @@ func Test_removeAttribute(t *testing.T) {
 }
 
 func Test_hasAttribute(t *testing.T) {
+	defer errors.Debug()
+
 	origin := `<img 
 		id="main" 
 		class="img-thumbnail" 
@@ -262,6 +276,8 @@ func Test_hasAttribute(t *testing.T) {
 }
 
 func Test_textContent(t *testing.T) {
+	defer errors.Debug()
+
 	scenarios := map[string]string{
 		"this is only ordinary text":               "this is only ordinary text",
 		"<h1>Hello</h1>":                           "Hello",
@@ -291,6 +307,8 @@ func Test_textContent(t *testing.T) {
 }
 
 func Test_outerHTML(t *testing.T) {
+	defer errors.Debug()
+
 	scenarios := []string{
 		"this is only ordinary text",
 		"<h1>Hello</h1>",
@@ -319,6 +337,8 @@ func Test_outerHTML(t *testing.T) {
 }
 
 func Test_innerHTML(t *testing.T) {
+	defer errors.Debug()
+
 	scenarios := map[string]string{
 		"this is only ordinary text":               "",
 		"<h1>Hello</h1>":                           "Hello",
@@ -348,6 +368,8 @@ func Test_innerHTML(t *testing.T) {
 }
 
 func Test_documentElement(t *testing.T) {
+	defer errors.Debug()
+
 	doc, _ := html.Parse(strings.NewReader("<html></html>"))
 	docElement := documentElement(doc)
 
@@ -357,6 +379,8 @@ func Test_documentElement(t *testing.T) {
 }
 
 func Test_id(t *testing.T) {
+	defer errors.Debug()
+
 	scenarios := map[string]string{
 		`<p id="txt-excerpt"></p>`:         "txt-excerpt",
 		`<img src="" alt="" id="avatar"/>`: "avatar",
@@ -386,6 +410,8 @@ func Test_id(t *testing.T) {
 }
 
 func Test_class(t *testing.T) {
+	defer errors.Debug()
+
 	scenarios := map[string]string{
 		`<p class="dark"></p>`:                     "dark",
 		`<img src="" alt="" class="round-image"/>`: "round-image",
@@ -415,6 +441,8 @@ func Test_class(t *testing.T) {
 }
 
 func Test_children(t *testing.T) {
+	defer errors.Debug()
+
 	doc := openTestFile("test-pages/nodes.html")
 
 	body := getElementsByTagName(doc, "body")[0]
@@ -430,6 +458,8 @@ func Test_children(t *testing.T) {
 }
 
 func Test_childNodes(t *testing.T) {
+	defer errors.Debug()
+
 	doc := openTestFile("test-pages/nodes.html")
 
 	body := getElementsByTagName(doc, "body")[0]
@@ -445,6 +475,8 @@ func Test_childNodes(t *testing.T) {
 }
 
 func Test_firstElementChild(t *testing.T) {
+	defer errors.Debug()
+
 	origin := `<div>
 		Hi, this is a TextNode.
 		<p>This is HTML element p.</p>
@@ -472,6 +504,8 @@ func Test_firstElementChild(t *testing.T) {
 }
 
 func Test_nextElementSibling(t *testing.T) {
+	defer errors.Debug()
+
 	origin := `<div>
 		Hi, this is a TextNode.
 		<p>This is HTML element p.</p>
@@ -500,6 +534,8 @@ func Test_nextElementSibling(t *testing.T) {
 }
 
 func Test_appendChild_fromNew(t *testing.T) {
+	defer errors.Debug()
+
 	origin := `<div><p>This is a div with one lonely p.</p></div>`
 
 	doc, err := html.Parse(strings.NewReader(origin))
@@ -523,6 +559,8 @@ func Test_appendChild_fromNew(t *testing.T) {
 }
 
 func Test_appendChild_fromExisting(t *testing.T) {
+	defer errors.Debug()
+
 	origin := `<div><div></div><p>One div-less p</p></div>`
 
 	doc, err := html.Parse(strings.NewReader(origin))
@@ -547,6 +585,8 @@ func Test_appendChild_fromExisting(t *testing.T) {
 }
 
 func Test_replaceNode(t *testing.T) {
+	defer errors.Debug()
+
 	origin := `<p>Paragraph with one thousand words</p>`
 
 	doc, err := html.Parse(strings.NewReader(origin))
@@ -571,6 +611,8 @@ func Test_replaceNode(t *testing.T) {
 }
 
 func Test_includeNode(t *testing.T) {
+	defer errors.Debug()
+
 	doc := openTestFile("test-pages/nodes.html")
 
 	body := getElementsByTagName(doc, "body")[0]
@@ -601,6 +643,8 @@ func Test_includeNode(t *testing.T) {
 }
 
 func Test_cloneNode(t *testing.T) {
+	defer errors.Debug()
+
 	scenarios := []string{
 		`<p>Hello world</p>`,
 		`<p>This has <b>bold</b> content</p>`,

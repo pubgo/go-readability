@@ -36,7 +36,7 @@ func renderToFile(element *html.Node, filename string) {
 	dstFile, err := os.Create(filename)
 	errors.Wrap(err, "failed to create file")
 
-	defer errors.Panic(dstFile.Close())
+	defer dstFile.Close()
 
 	errors.Panic(html.Render(dstFile, element))
 }
