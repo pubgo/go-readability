@@ -155,7 +155,6 @@ var _parserPool = &sync.Pool{
 
 func NewParser() *Parser {
 	defer errors.Handle(func() {})
-
 	return _parserPool.Get().(*Parser)
 }
 
@@ -742,453 +741,455 @@ func (ps *Parser) getNodeAncestors(node *html.Node, maxDepth int) []*html.Node {
 // element types), find the content that is most likely to be the
 // stuff a user wants to read. Then return it wrapped up in a div.
 func (ps *Parser) grabArticle() *html.Node {
-	for {
-		doc := cloneNode(ps.doc)
+	//for {
+	//doc := cloneNode(ps.doc)
+	doc := ps.doc
 
-		var page *html.Node
-		if nodes := getElementsByTagName(doc, "body"); len(nodes) > 0 {
-			page = nodes[0]
+	var page *html.Node
+	if nodes := getElementsByTagName(doc, "body"); len(nodes) > 0 {
+		page = nodes[0]
+	}
+
+	// We can't grab an article if we don't have a page!
+	if page == nil {
+		return nil
+	}
+
+	// First, node prepping. Trash nodes that look cruddy (like ones
+	// with the class name "comment", etc), and turn divs into P
+	// tags where they have been used inappropriately (as in, where
+	// they contain no other block level elements.)
+	var elementsToScore []*html.Node
+	var node = documentElement(doc)
+
+	for node != nil {
+		matchString := className(node) + " " + id(node)
+
+		if !ps.isProbablyVisible(node) {
+			node = ps.removeAndGetNext(node)
+			continue
 		}
 
-		// We can't grab an article if we don't have a page!
-		if page == nil {
-			return nil
+		// Check to see if this node is a byline, and remove it if
+		// it is true.
+		if ps.checkByline(node, matchString) {
+			node = ps.removeAndGetNext(node)
+			continue
 		}
 
-		// First, node prepping. Trash nodes that look cruddy (like ones
-		// with the class name "comment", etc), and turn divs into P
-		// tags where they have been used inappropriately (as in, where
-		// they contain no other block level elements.)
-		var elementsToScore []*html.Node
-		var node = documentElement(doc)
-
-		for node != nil {
-			matchString := className(node) + " " + id(node)
-
-			if !ps.isProbablyVisible(node) {
+		// Remove unlikely candidates
+		nodeTagName := tagName(node)
+		if ps.flags.stripUnlikelys {
+			if rxUnlikelyCandidates.MatchString(matchString) &&
+				!rxOkMaybeItsACandidate.MatchString(matchString) &&
+				!ps.hasAncestorTag(node, "table", 3, nil) &&
+				nodeTagName != "body" && nodeTagName != "a" {
 				node = ps.removeAndGetNext(node)
 				continue
 			}
+		}
 
-			// Check to see if this node is a byline, and remove it if
-			// it is true.
-			if ps.checkByline(node, matchString) {
+		// Remove DIV, SECTION, and HEADER nodes without any
+		// content(e.g. text, image, video, or iframe).
+		switch nodeTagName {
+		case "div", "section", "header",
+			"h1", "h2", "h3", "h4", "h5", "h6":
+			if ps.isElementWithoutContent(node) {
 				node = ps.removeAndGetNext(node)
 				continue
 			}
+		}
 
-			// Remove unlikely candidates
-			nodeTagName := tagName(node)
-			if ps.flags.stripUnlikelys {
-				if rxUnlikelyCandidates.MatchString(matchString) &&
-					!rxOkMaybeItsACandidate.MatchString(matchString) &&
-					!ps.hasAncestorTag(node, "table", 3, nil) &&
-					nodeTagName != "body" && nodeTagName != "a" {
-					node = ps.removeAndGetNext(node)
-					continue
+		if indexOf(ps.TagsToScore, nodeTagName) != -1 {
+			elementsToScore = append(elementsToScore, node)
+		}
+
+		// Turn all divs that don't have children block level
+		// elements into p's
+		if nodeTagName == "div" {
+			// Put phrasing content into paragraphs.
+			var p *html.Node
+			childNode := node.FirstChild
+			for childNode != nil {
+				nextSibling := childNode.NextSibling
+				if ps.isPhrasingContent(childNode) {
+					if p != nil {
+						appendChild(p, childNode)
+					} else if !ps.isWhitespace(childNode) {
+						p = createElement("p")
+						appendChild(p, cloneNode(childNode))
+						replaceNode(childNode, p)
+					}
+				} else if p != nil {
+					for p.LastChild != nil && ps.isWhitespace(p.LastChild) {
+						p.RemoveChild(p.LastChild)
+					}
+					p = nil
 				}
+				childNode = nextSibling
 			}
 
-			// Remove DIV, SECTION, and HEADER nodes without any
-			// content(e.g. text, image, video, or iframe).
-			switch nodeTagName {
-			case "div", "section", "header",
-				"h1", "h2", "h3", "h4", "h5", "h6":
-				if ps.isElementWithoutContent(node) {
-					node = ps.removeAndGetNext(node)
-					continue
-				}
-			}
-
-			if indexOf(ps.TagsToScore, nodeTagName) != -1 {
+			// Sites like http://mobile.slate.com encloses each
+			// paragraph with a DIV element. DIVs with only a P
+			// element inside and no text content can be safely
+			// converted into plain P elements to avoid confusing
+			// the scoring algorithm with DIVs with are, in
+			// practice, paragraphs.
+			if ps.hasSingleTagInsideElement(node, "p") && ps.getLinkDensity(node) < 0.25 {
+				newNode := children(node)[0]
+				replaceNode(node, newNode)
+				node = newNode
+				elementsToScore = append(elementsToScore, node)
+			} else if !ps.hasChildBlockElement(node) {
+				ps.setNodeTag(node, "p")
 				elementsToScore = append(elementsToScore, node)
 			}
+		}
+		node = ps.getNextNode(node, false)
+	}
 
-			// Turn all divs that don't have children block level
-			// elements into p's
-			if nodeTagName == "div" {
-				// Put phrasing content into paragraphs.
-				var p *html.Node
-				childNode := node.FirstChild
-				for childNode != nil {
-					nextSibling := childNode.NextSibling
-					if ps.isPhrasingContent(childNode) {
-						if p != nil {
-							appendChild(p, childNode)
-						} else if !ps.isWhitespace(childNode) {
-							p = createElement("p")
-							appendChild(p, cloneNode(childNode))
-							replaceNode(childNode, p)
-						}
-					} else if p != nil {
-						for p.LastChild != nil && ps.isWhitespace(p.LastChild) {
-							p.RemoveChild(p.LastChild)
-						}
-						p = nil
-					}
-					childNode = nextSibling
-				}
-
-				// Sites like http://mobile.slate.com encloses each
-				// paragraph with a DIV element. DIVs with only a P
-				// element inside and no text content can be safely
-				// converted into plain P elements to avoid confusing
-				// the scoring algorithm with DIVs with are, in
-				// practice, paragraphs.
-				if ps.hasSingleTagInsideElement(node, "p") && ps.getLinkDensity(node) < 0.25 {
-					newNode := children(node)[0]
-					replaceNode(node, newNode)
-					node = newNode
-					elementsToScore = append(elementsToScore, node)
-				} else if !ps.hasChildBlockElement(node) {
-					ps.setNodeTag(node, "p")
-					elementsToScore = append(elementsToScore, node)
-				}
-			}
-			node = ps.getNextNode(node, false)
+	// Loop through all paragraphs, and assign a score to them based
+	// on how content-y they look. Then add their score to their
+	// parent node. A score is determined by things like number of
+	// commas, class names, etc. Maybe eventually link density.
+	var candidates []*html.Node
+	ps.forEachNode(elementsToScore, func(elementToScore *html.Node, _ int) {
+		if elementToScore.Parent == nil || tagName(elementToScore.Parent) == "" {
+			return
 		}
 
-		// Loop through all paragraphs, and assign a score to them based
-		// on how content-y they look. Then add their score to their
-		// parent node. A score is determined by things like number of
-		// commas, class names, etc. Maybe eventually link density.
-		var candidates []*html.Node
-		ps.forEachNode(elementsToScore, func(elementToScore *html.Node, _ int) {
-			if elementToScore.Parent == nil || tagName(elementToScore.Parent) == "" {
+		// If this paragraph is less than 25 characters, don't even count it.
+		innerText := ps.getInnerText(elementToScore, true)
+		if len(innerText) < 25 {
+			return
+		}
+
+		// Exclude nodes with no ancestor.
+		ancestors := ps.getNodeAncestors(elementToScore, 3)
+		if len(ancestors) == 0 {
+			return
+		}
+
+		// Add a point for the paragraph itself as a base.
+		contentScore := 1
+
+		// Add points for any commas within this paragraph.
+		contentScore += strings.Count(innerText, ",")
+
+		// For every 100 characters in this paragraph, add another point. Up to 3 points.
+		contentScore += int(math.Min(math.Floor(float64(len(innerText))/100.0), 3.0))
+
+		// Initialize and score ancestors.
+		ps.forEachNode(ancestors, func(ancestor *html.Node, level int) {
+			if tagName(ancestor) == "" || ancestor.Parent == nil || ancestor.Parent.Type != html.ElementNode {
 				return
 			}
 
-			// If this paragraph is less than 25 characters, don't even count it.
-			innerText := ps.getInnerText(elementToScore, true)
-			if len(innerText) < 25 {
-				return
+			if !ps.hasContentScore(ancestor) {
+				ps.initializeNode(ancestor)
+				candidates = append(candidates, ancestor)
 			}
 
-			// Exclude nodes with no ancestor.
-			ancestors := ps.getNodeAncestors(elementToScore, 3)
-			if len(ancestors) == 0 {
-				return
+			// Node score divider:
+			// - parent:             1 (no division)
+			// - grandparent:        2
+			// - great grandparent+: ancestor level * 3
+			scoreDivider := 1
+			switch level {
+			case 0:
+				scoreDivider = 1
+			case 1:
+				scoreDivider = 2
+			default:
+				scoreDivider = level * 3
 			}
 
-			// Add a point for the paragraph itself as a base.
-			contentScore := 1
-
-			// Add points for any commas within this paragraph.
-			contentScore += strings.Count(innerText, ",")
-
-			// For every 100 characters in this paragraph, add another point. Up to 3 points.
-			contentScore += int(math.Min(math.Floor(float64(len(innerText))/100.0), 3.0))
-
-			// Initialize and score ancestors.
-			ps.forEachNode(ancestors, func(ancestor *html.Node, level int) {
-				if tagName(ancestor) == "" || ancestor.Parent == nil || ancestor.Parent.Type != html.ElementNode {
-					return
-				}
-
-				if !ps.hasContentScore(ancestor) {
-					ps.initializeNode(ancestor)
-					candidates = append(candidates, ancestor)
-				}
-
-				// Node score divider:
-				// - parent:             1 (no division)
-				// - grandparent:        2
-				// - great grandparent+: ancestor level * 3
-				scoreDivider := 1
-				switch level {
-				case 0:
-					scoreDivider = 1
-				case 1:
-					scoreDivider = 2
-				default:
-					scoreDivider = level * 3
-				}
-
-				ancestorScore := ps.getContentScore(ancestor)
-				ancestorScore += float64(contentScore) / float64(scoreDivider)
-				ps.setContentScore(ancestor, ancestorScore)
-			})
+			ancestorScore := ps.getContentScore(ancestor)
+			ancestorScore += float64(contentScore) / float64(scoreDivider)
+			ps.setContentScore(ancestor, ancestorScore)
 		})
+	})
 
-		// These lines are a bit different compared to Readability.js.
-		// In Readability.js, they fetch NTopCandidates utilising array
-		// method like `splice` and `pop`. In Go, array method like that
-		// is not as simple, especially since we are working with pointer.
-		// So, here we simply sort top candidates, and limit it to
-		// max NTopCandidates.
+	// These lines are a bit different compared to Readability.js.
+	// In Readability.js, they fetch NTopCandidates utilising array
+	// method like `splice` and `pop`. In Go, array method like that
+	// is not as simple, especially since we are working with pointer.
+	// So, here we simply sort top candidates, and limit it to
+	// max NTopCandidates.
 
-		// Scale the final candidates score based on link density. Good
-		// content should have a relatively small link density (5% or
-		// less) and be mostly unaffected by this operation.
-		for i := 0; i < len(candidates); i++ {
-			candidate := candidates[i]
-			candidateScore := ps.getContentScore(candidate) * (1 - ps.getLinkDensity(candidate))
-			ps.setContentScore(candidate, candidateScore)
+	// Scale the final candidates score based on link density. Good
+	// content should have a relatively small link density (5% or
+	// less) and be mostly unaffected by this operation.
+	for i := 0; i < len(candidates); i++ {
+		candidate := candidates[i]
+		candidateScore := ps.getContentScore(candidate) * (1 - ps.getLinkDensity(candidate))
+		ps.setContentScore(candidate, candidateScore)
+	}
+
+	// After we've calculated scores, sort through all of the possible
+	// candidate nodes we found and find the one with the highest score.
+	sort.Slice(candidates, func(i int, j int) bool {
+		return ps.getContentScore(candidates[i]) > ps.getContentScore(candidates[j])
+	})
+
+	var topCandidates []*html.Node
+	if len(candidates) > ps.NTopCandidates {
+		topCandidates = candidates[:ps.NTopCandidates]
+	} else {
+		topCandidates = candidates
+	}
+
+	var topCandidate, parentOfTopCandidate *html.Node
+	neededToCreateTopCandidate := false
+	if len(topCandidates) > 0 {
+		topCandidate = topCandidates[0]
+	}
+
+	// If we still have no top candidate, just use the body as a last
+	// resort. We also have to copy the body node so it is something
+	// we can modify.
+	if topCandidate == nil || tagName(topCandidate) == "body" {
+		// Move all of the page's children into topCandidate
+		topCandidate = createElement("div")
+		neededToCreateTopCandidate = true
+		// Move everything (not just elements, also text nodes etc.)
+		// into the container so we even include text directly in the body:
+		kids := childNodes(page)
+		for i := 0; i < len(kids); i++ {
+			appendChild(topCandidate, kids[i])
 		}
 
-		// After we've calculated scores, sort through all of the possible
-		// candidate nodes we found and find the one with the highest score.
-		sort.Slice(candidates, func(i int, j int) bool {
-			return ps.getContentScore(candidates[i]) > ps.getContentScore(candidates[j])
-		})
-
-		var topCandidates []*html.Node
-		if len(candidates) > ps.NTopCandidates {
-			topCandidates = candidates[:ps.NTopCandidates]
-		} else {
-			topCandidates = candidates
+		appendChild(page, topCandidate)
+		ps.initializeNode(topCandidate)
+	} else if topCandidate != nil {
+		// Find a better top candidate node if it contains (at least three)
+		// nodes which belong to `topCandidates` array and whose scores are
+		// quite closed with current `topCandidate` node.
+		topCandidateScore := ps.getContentScore(topCandidate)
+		var alternativeCandidateAncestors [][]*html.Node
+		for i := 1; i < len(topCandidates); i++ {
+			if ps.getContentScore(topCandidates[i])/topCandidateScore >= 0.75 {
+				topCandidateAncestors := ps.getNodeAncestors(topCandidates[i], 0)
+				alternativeCandidateAncestors = append(alternativeCandidateAncestors, topCandidateAncestors)
+			}
 		}
 
-		var topCandidate, parentOfTopCandidate *html.Node
-		neededToCreateTopCandidate := false
-		if len(topCandidates) > 0 {
-			topCandidate = topCandidates[0]
-		}
-
-		// If we still have no top candidate, just use the body as a last
-		// resort. We also have to copy the body node so it is something
-		// we can modify.
-		if topCandidate == nil || tagName(topCandidate) == "body" {
-			// Move all of the page's children into topCandidate
-			topCandidate = createElement("div")
-			neededToCreateTopCandidate = true
-			// Move everything (not just elements, also text nodes etc.)
-			// into the container so we even include text directly in the body:
-			kids := childNodes(page)
-			for i := 0; i < len(kids); i++ {
-				appendChild(topCandidate, kids[i])
-			}
-
-			appendChild(page, topCandidate)
-			ps.initializeNode(topCandidate)
-		} else if topCandidate != nil {
-			// Find a better top candidate node if it contains (at least three)
-			// nodes which belong to `topCandidates` array and whose scores are
-			// quite closed with current `topCandidate` node.
-			topCandidateScore := ps.getContentScore(topCandidate)
-			var alternativeCandidateAncestors [][]*html.Node
-			for i := 1; i < len(topCandidates); i++ {
-				if ps.getContentScore(topCandidates[i])/topCandidateScore >= 0.75 {
-					topCandidateAncestors := ps.getNodeAncestors(topCandidates[i], 0)
-					alternativeCandidateAncestors = append(alternativeCandidateAncestors, topCandidateAncestors)
-				}
-			}
-
-			minimumTopCandidates := 3
-			if len(alternativeCandidateAncestors) >= minimumTopCandidates {
-				parentOfTopCandidate = topCandidate.Parent
-				for parentOfTopCandidate != nil && tagName(parentOfTopCandidate) != "body" {
-					listContainingThisAncestor := 0
-					for ancestorIndex := 0; ancestorIndex < len(alternativeCandidateAncestors) && listContainingThisAncestor < minimumTopCandidates; ancestorIndex++ {
-						if includeNode(alternativeCandidateAncestors[ancestorIndex], parentOfTopCandidate) {
-							listContainingThisAncestor++
-						}
-					}
-
-					if listContainingThisAncestor >= minimumTopCandidates {
-						topCandidate = parentOfTopCandidate
-						break
-					}
-
-					parentOfTopCandidate = parentOfTopCandidate.Parent
-				}
-			}
-
-			if !ps.hasContentScore(topCandidate) {
-				ps.initializeNode(topCandidate)
-			}
-
-			// Because of our bonus system, parents of candidates might
-			// have scores themselves. They get half of the node. There
-			// won't be nodes with higher scores than our topCandidate,
-			// but if we see the score going *up* in the first few steps *
-			// up the tree, that's a decent sign that there might be more
-			// content lurking in other places that we want to unify in.
-			// The sibling stuff below does some of that - but only if
-			// we've looked high enough up the DOM tree.
+		minimumTopCandidates := 3
+		if len(alternativeCandidateAncestors) >= minimumTopCandidates {
 			parentOfTopCandidate = topCandidate.Parent
-			lastScore := ps.getContentScore(topCandidate)
-			// The scores shouldn't get too lops.
-			scoreThreshold := lastScore / 3.0
 			for parentOfTopCandidate != nil && tagName(parentOfTopCandidate) != "body" {
-				if !ps.hasContentScore(parentOfTopCandidate) {
-					parentOfTopCandidate = parentOfTopCandidate.Parent
-					continue
+				listContainingThisAncestor := 0
+				for ancestorIndex := 0; ancestorIndex < len(alternativeCandidateAncestors) && listContainingThisAncestor < minimumTopCandidates; ancestorIndex++ {
+					if includeNode(alternativeCandidateAncestors[ancestorIndex], parentOfTopCandidate) {
+						listContainingThisAncestor++
+					}
 				}
 
-				parentScore := ps.getContentScore(parentOfTopCandidate)
-				if parentScore < scoreThreshold {
-					break
-				}
-
-				if parentScore > lastScore {
-					// Alright! We found a better parent to use.
+				if listContainingThisAncestor >= minimumTopCandidates {
 					topCandidate = parentOfTopCandidate
 					break
 				}
 
-				lastScore = parentScore
 				parentOfTopCandidate = parentOfTopCandidate.Parent
 			}
-
-			// If the top candidate is the only child, use parent
-			// instead. This will help sibling joining logic when
-			// adjacent content is actually located in parent's
-			// sibling node.
-			parentOfTopCandidate = topCandidate.Parent
-			for parentOfTopCandidate != nil && tagName(parentOfTopCandidate) != "body" && len(children(parentOfTopCandidate)) == 1 {
-				topCandidate = parentOfTopCandidate
-				parentOfTopCandidate = topCandidate.Parent
-			}
-
-			if !ps.hasContentScore(topCandidate) {
-				ps.initializeNode(topCandidate)
-			}
 		}
 
-		// Now that we have the top candidate, look through its siblings
-		// for content that might also be related. Things like preambles,
-		// content split by ads that we removed, etc.
-		articleContent := createElement("div")
-		siblingScoreThreshold := math.Max(10, ps.getContentScore(topCandidate)*0.2)
+		if !ps.hasContentScore(topCandidate) {
+			ps.initializeNode(topCandidate)
+		}
 
-		// Keep potential top candidate's parent node to try to get text direction of it later.
-		topCandidateScore := ps.getContentScore(topCandidate)
-		topCandidateClassName := className(topCandidate)
-
+		// Because of our bonus system, parents of candidates might
+		// have scores themselves. They get half of the node. There
+		// won't be nodes with higher scores than our topCandidate,
+		// but if we see the score going *up* in the first few steps *
+		// up the tree, that's a decent sign that there might be more
+		// content lurking in other places that we want to unify in.
+		// The sibling stuff below does some of that - but only if
+		// we've looked high enough up the DOM tree.
 		parentOfTopCandidate = topCandidate.Parent
-		siblings := children(parentOfTopCandidate)
-		for s := 0; s < len(siblings); s++ {
-			sibling := siblings[s]
-			appendNode := false
-
-			if sibling == topCandidate {
-				appendNode = true
-			} else {
-				contentBonus := float64(0)
-
-				// Give a bonus if sibling nodes and top candidates have the example same classname
-				if className(sibling) == topCandidateClassName && topCandidateClassName != "" {
-					contentBonus += topCandidateScore * 0.2
-				}
-
-				if ps.hasContentScore(sibling) && ps.getContentScore(sibling)+contentBonus >= siblingScoreThreshold {
-					appendNode = true
-				} else if tagName(sibling) == "p" {
-					linkDensity := ps.getLinkDensity(sibling)
-					nodeContent := ps.getInnerText(sibling, true)
-					nodeLength := len(nodeContent)
-
-					if nodeLength > 80 && linkDensity < 0.25 {
-						appendNode = true
-					} else if nodeLength < 80 && nodeLength > 0 && linkDensity == 0 &&
-						rxSentencePeriod.MatchString(nodeContent) {
-						appendNode = true
-					}
-				}
+		lastScore := ps.getContentScore(topCandidate)
+		// The scores shouldn't get too lops.
+		scoreThreshold := lastScore / 3.0
+		for parentOfTopCandidate != nil && tagName(parentOfTopCandidate) != "body" {
+			if !ps.hasContentScore(parentOfTopCandidate) {
+				parentOfTopCandidate = parentOfTopCandidate.Parent
+				continue
 			}
 
-			if appendNode {
-				// We have a node that isn't a common block level
-				// element, like a form or td tag. Turn it into a div
-				// so it doesn't get filtered out later by accident.
-				if indexOf(alterToDivExceptions, tagName(sibling)) == -1 {
-					ps.setNodeTag(sibling, "div")
-				}
-
-				appendChild(articleContent, sibling)
+			parentScore := ps.getContentScore(parentOfTopCandidate)
+			if parentScore < scoreThreshold {
+				break
 			}
+
+			if parentScore > lastScore {
+				// Alright! We found a better parent to use.
+				topCandidate = parentOfTopCandidate
+				break
+			}
+
+			lastScore = parentScore
+			parentOfTopCandidate = parentOfTopCandidate.Parent
 		}
 
-		// So we have all of the content that we need. Now we clean
-		// it up for presentation.
-		ps.prepArticle(articleContent)
-
-		if neededToCreateTopCandidate {
-			// We already created a fake div thing, and there wouldn't
-			// have been any siblings left for the previous loop, so
-			// there's no point trying to create a new div, and then
-			// move all the children over. Just assign IDs and class
-			// names here. No need to append because that already
-			// happened anyway.
-			//
-			// By the way, this line is different with Readability.js.
-			// In Readability.js, when using `appendChild`, the node is
-			// still referenced. Meanwhile here, our `appendChild` will
-			// clone the node, put it in the new place, then delete
-			// the original.
-			firstChild := firstElementChild(articleContent)
-			if firstChild != nil && tagName(firstChild) == "div" {
-				setAttribute(firstChild, "id", "readability-page-1")
-				setAttribute(firstChild, "class", "page")
-			}
-		} else {
-			div := createElement("div")
-			setAttribute(div, "id", "readability-page-1")
-			setAttribute(div, "class", "page")
-			childs := childNodes(articleContent)
-			for i := 0; i < len(childs); i++ {
-				appendChild(div, childs[i])
-			}
-			appendChild(articleContent, div)
+		// If the top candidate is the only child, use parent
+		// instead. This will help sibling joining logic when
+		// adjacent content is actually located in parent's
+		// sibling node.
+		parentOfTopCandidate = topCandidate.Parent
+		for parentOfTopCandidate != nil && tagName(parentOfTopCandidate) != "body" && len(children(parentOfTopCandidate)) == 1 {
+			topCandidate = parentOfTopCandidate
+			parentOfTopCandidate = topCandidate.Parent
 		}
 
-		parseSuccessful := true
-
-		// Now that we've gone through the full algorithm, check to
-		// see if we got any meaningful content. If we didn't, we may
-		// need to re-run grabArticle with different flags set. This
-		// gives us a higher likelihood of finding the content, and
-		// the sieve approach gives us a higher likelihood of
-		// finding the -right- content.
-		textLength := len(ps.getInnerText(articleContent, true))
-		if textLength < ps.CharThresholds {
-			parseSuccessful = false
-
-			if ps.flags.stripUnlikelys {
-				ps.flags.stripUnlikelys = false
-				ps.attempts = append(ps.attempts, parseAttempt{
-					articleContent: articleContent,
-					textLength:     textLength,
-				})
-			} else if ps.flags.useWeightClasses {
-				ps.flags.useWeightClasses = false
-				ps.attempts = append(ps.attempts, parseAttempt{
-					articleContent: articleContent,
-					textLength:     textLength,
-				})
-			} else if ps.flags.cleanConditionally {
-				ps.flags.cleanConditionally = false
-				ps.attempts = append(ps.attempts, parseAttempt{
-					articleContent: articleContent,
-					textLength:     textLength,
-				})
-			} else {
-				ps.attempts = append(ps.attempts, parseAttempt{
-					articleContent: articleContent,
-					textLength:     textLength,
-				})
-
-				// No luck after removing flags, just return the
-				// longest text we found during the different loops *
-				sort.Slice(ps.attempts, func(i, j int) bool {
-					return ps.attempts[i].textLength > ps.attempts[j].textLength
-				})
-
-				// But first check if we actually have something
-				if ps.attempts[0].textLength == 0 {
-					return nil
-				}
-
-				articleContent = ps.attempts[0].articleContent
-				parseSuccessful = true
-			}
-		}
-
-		if parseSuccessful {
-			return articleContent
+		if !ps.hasContentScore(topCandidate) {
+			ps.initializeNode(topCandidate)
 		}
 	}
+
+	// Now that we have the top candidate, look through its siblings
+	// for content that might also be related. Things like preambles,
+	// content split by ads that we removed, etc.
+	articleContent := createElement("div")
+	siblingScoreThreshold := math.Max(10, ps.getContentScore(topCandidate)*0.2)
+
+	// Keep potential top candidate's parent node to try to get text direction of it later.
+	topCandidateScore := ps.getContentScore(topCandidate)
+	topCandidateClassName := className(topCandidate)
+
+	parentOfTopCandidate = topCandidate.Parent
+	siblings := children(parentOfTopCandidate)
+	for s := 0; s < len(siblings); s++ {
+		sibling := siblings[s]
+		appendNode := false
+
+		if sibling == topCandidate {
+			appendNode = true
+		} else {
+			contentBonus := float64(0)
+
+			// Give a bonus if sibling nodes and top candidates have the example same classname
+			if className(sibling) == topCandidateClassName && topCandidateClassName != "" {
+				contentBonus += topCandidateScore * 0.2
+			}
+
+			if ps.hasContentScore(sibling) && ps.getContentScore(sibling)+contentBonus >= siblingScoreThreshold {
+				appendNode = true
+			} else if tagName(sibling) == "p" {
+				linkDensity := ps.getLinkDensity(sibling)
+				nodeContent := ps.getInnerText(sibling, true)
+				nodeLength := len(nodeContent)
+
+				if nodeLength > 80 && linkDensity < 0.25 {
+					appendNode = true
+				} else if nodeLength < 80 && nodeLength > 0 && linkDensity == 0 &&
+					rxSentencePeriod.MatchString(nodeContent) {
+					appendNode = true
+				}
+			}
+		}
+
+		if appendNode {
+			// We have a node that isn't a common block level
+			// element, like a form or td tag. Turn it into a div
+			// so it doesn't get filtered out later by accident.
+			if indexOf(alterToDivExceptions, tagName(sibling)) == -1 {
+				ps.setNodeTag(sibling, "div")
+			}
+
+			appendChild(articleContent, sibling)
+		}
+	}
+
+	// So we have all of the content that we need. Now we clean
+	// it up for presentation.
+	ps.prepArticle(articleContent)
+
+	if neededToCreateTopCandidate {
+		// We already created a fake div thing, and there wouldn't
+		// have been any siblings left for the previous loop, so
+		// there's no point trying to create a new div, and then
+		// move all the children over. Just assign IDs and class
+		// names here. No need to append because that already
+		// happened anyway.
+		//
+		// By the way, this line is different with Readability.js.
+		// In Readability.js, when using `appendChild`, the node is
+		// still referenced. Meanwhile here, our `appendChild` will
+		// clone the node, put it in the new place, then delete
+		// the original.
+		firstChild := firstElementChild(articleContent)
+		if firstChild != nil && tagName(firstChild) == "div" {
+			setAttribute(firstChild, "id", "readability-page-1")
+			setAttribute(firstChild, "class", "page")
+		}
+	} else {
+		div := createElement("div")
+		setAttribute(div, "id", "readability-page-1")
+		setAttribute(div, "class", "page")
+		childs := childNodes(articleContent)
+		for i := 0; i < len(childs); i++ {
+			appendChild(div, childs[i])
+		}
+		appendChild(articleContent, div)
+	}
+
+	parseSuccessful := true
+
+	// Now that we've gone through the full algorithm, check to
+	// see if we got any meaningful content. If we didn't, we may
+	// need to re-run grabArticle with different flags set. This
+	// gives us a higher likelihood of finding the content, and
+	// the sieve approach gives us a higher likelihood of
+	// finding the -right- content.
+	textLength := len(ps.getInnerText(articleContent, true))
+	if textLength < ps.CharThresholds {
+		parseSuccessful = false
+
+		if ps.flags.stripUnlikelys {
+			ps.flags.stripUnlikelys = false
+			ps.attempts = append(ps.attempts, parseAttempt{
+				articleContent: articleContent,
+				textLength:     textLength,
+			})
+		} else if ps.flags.useWeightClasses {
+			ps.flags.useWeightClasses = false
+			ps.attempts = append(ps.attempts, parseAttempt{
+				articleContent: articleContent,
+				textLength:     textLength,
+			})
+		} else if ps.flags.cleanConditionally {
+			ps.flags.cleanConditionally = false
+			ps.attempts = append(ps.attempts, parseAttempt{
+				articleContent: articleContent,
+				textLength:     textLength,
+			})
+		} else {
+			ps.attempts = append(ps.attempts, parseAttempt{
+				articleContent: articleContent,
+				textLength:     textLength,
+			})
+
+			// No luck after removing flags, just return the
+			// longest text we found during the different loops *
+			sort.Slice(ps.attempts, func(i, j int) bool {
+				return ps.attempts[i].textLength > ps.attempts[j].textLength
+			})
+
+			// But first check if we actually have something
+			if ps.attempts[0].textLength == 0 {
+				return nil
+			}
+
+			articleContent = ps.attempts[0].articleContent
+			parseSuccessful = true
+		}
+	}
+
+	if parseSuccessful {
+		return articleContent
+	}
+	//}
+	return nil
 }
 
 // isValidByline checks whether the input string could be a byline.
