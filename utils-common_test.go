@@ -62,7 +62,7 @@ func Test_toAbsoluteURI(t *testing.T) {
 	}
 
 	for url, expected := range scenarios {
-		if result := toAbsoluteURI(url, baseURL); result != expected {
+		if result := ToAbsoluteURI(url, baseURL); result != expected {
 			t.Errorf("\n"+
 				"url  : \"%s\"\n"+
 				"want : \"%s\"\n"+

@@ -14,6 +14,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/PuerkitoBio/goquery"
 	"golang.org/x/net/html"
 )
 
@@ -296,7 +297,7 @@ func (ps *Parser) fixRelativeURIs(articleContent *html.Node) {
 			text := createTextNode(textContent(link))
 			replaceNode(link, text)
 		} else {
-			newHref := toAbsoluteURI(href, ps.documentURI)
+			newHref := ToAbsoluteURI(href, ps.documentURI)
 			if newHref == "" {
 				removeAttribute(link, "href")
 			} else {
@@ -312,7 +313,7 @@ func (ps *Parser) fixRelativeURIs(articleContent *html.Node) {
 			return
 		}
 
-		newSrc := toAbsoluteURI(src, ps.documentURI)
+		newSrc := ToAbsoluteURI(src, ps.documentURI)
 		if newSrc == "" {
 			removeAttribute(img, "src")
 		} else {
@@ -393,6 +394,21 @@ func (ps *Parser) getArticleTitle() string {
 		(!titleHadHierarchicalSeparators ||
 			curTitleWordCount != wordCount(tmpOrigTitle)-1) {
 		curTitle = origTitle
+	}
+
+	if curTitle == "" {
+		c := goquery.NewDocumentFromNode(doc)
+		c.Find("h1").Each(func(i int, selection *goquery.Selection) {
+			if t := strings.TrimSpace(selection.Text()); t != "" {
+				curTitle = t
+			}
+		})
+
+		c.Find("h2").Each(func(i int, selection *goquery.Selection) {
+			if t := strings.TrimSpace(selection.Text()); t != "" {
+				curTitle = t
+			}
+		})
 	}
 
 	return curTitle
@@ -1284,7 +1300,7 @@ func (ps *Parser) getArticleMetadata() map[string]string {
 	}
 	for _, name := range possibleAttrNames {
 		if value, ok := values[name]; ok {
-			metadataImage = toAbsoluteURI(value, ps.documentURI)
+			metadataImage = ToAbsoluteURI(value, ps.documentURI)
 			break
 		}
 	}
@@ -1889,7 +1905,7 @@ func (ps *Parser) getArticleFavicon() string {
 		}
 	})
 
-	return toAbsoluteURI(favicon, ps.documentURI)
+	return ToAbsoluteURI(favicon, ps.documentURI)
 }
 
 // In dynamic language like JavaScript, we can easily add new

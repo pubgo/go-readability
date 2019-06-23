@@ -1,13 +1,13 @@
 package readability
 
 import (
+	"github.com/PuerkitoBio/purell"
 	"github.com/pubgo/errors"
 	"log"
 	"net/url"
 	"os"
 	"strings"
 
-	"github.com/PuerkitoBio/purell"
 	"golang.org/x/net/html"
 )
 
@@ -28,33 +28,6 @@ func wordCount(str string) int {
 	return len(strings.Fields(str))
 }
 
-// toAbsoluteURI convert uri to absolute path based on base.
-// However, if uri is prefixed with hash (#), the uri won't be changed.
-func toAbsoluteURI(uri string, base *url.URL) string {
-	defer errors.Handle(func() {})
-
-	if uri == "" || base == nil {
-		return ""
-	}
-
-	// If it is hash tag, return as it is
-	if uri[:1] == "#" {
-		return uri
-	}
-
-	// If it is already an absolute URL, return as it is
-	tmp, err := url.ParseRequestURI(uri)
-	if err == nil && tmp.Scheme != "" && tmp.Hostname() != "" {
-		return uri
-	}
-
-	// Otherwise, resolve against base URI.
-	tmp, err = url.Parse(uri)
-	errors.Wrap(err, "url parse error,url(%s)", uri)
-
-	return base.ResolveReference(tmp).String()
-}
-
 // renderToFile ender an element and save it to file.
 // It will panic if it fails to create destination file.
 func renderToFile(element *html.Node, filename string) {
@@ -68,7 +41,7 @@ func renderToFile(element *html.Node, filename string) {
 	errors.Panic(html.Render(dstFile, element))
 }
 
-func ToAbsoluteURI(u string, base string) string {
+func ToAbsoluteURI(u string, base *url.URL) string {
 	defer errors.Handle(func() {})
 
 	u = strings.ReplaceAll(strings.TrimSpace(u), " ", "")
@@ -93,6 +66,9 @@ func ToAbsoluteURI(u string, base string) string {
 		return ""
 	}
 
+	u = errors.If(strings.HasPrefix(u, "//"), base.Scheme+":"+u, u).(string)
+	u = errors.If(strings.HasPrefix(u, "/"), base.Scheme+"://"+base.Host+u, u).(string)
+
 	// If it is already an absolute URL, return as it is
 	_url, err := url.ParseRequestURI(u)
 	errors.Wrap(err, "url ParseRequestURI error")
@@ -100,12 +76,8 @@ func ToAbsoluteURI(u string, base string) string {
 		return u
 	}
 
-	// Otherwise, resolve against base URI.
-	baseUri, err := url.Parse(base)
-	errors.Wrap(err, "url parse error,url(%s)", u)
-
 	_u, err := purell.NormalizeURLString(
-		baseUri.ResolveReference(_url).String(),
+		base.ResolveReference(_url).String(),
 		purell.FlagsUsuallySafeGreedy|purell.FlagRemoveDuplicateSlashes|purell.FlagRemoveFragment,
 	)
 	errors.Wrap(err, "purell NormalizeURLString error")

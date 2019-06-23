@@ -8,10 +8,12 @@
 // are parse-able by go-readability as well.
 package readability_test
 
+//go tool pprof -web cpu.pprof
+
 import (
+	"github.com/pkg/profile"
 	"github.com/pubgo/errors"
 	"github.com/pubgo/go-readability"
-	"log"
 	"strings"
 	"testing"
 	"time"
@@ -23,17 +25,36 @@ import (
 func TestFromURL(t *testing.T) {
 	defer errors.Debug()
 
+	// 开始性能分析, 返回一个停止接口
+	stopper := profile.Start(
+		profile.CPUProfile,
+		profile.MutexProfile,
+		profile.MemProfile,
+		profile.ProfilePath("."),
+	)
+	// 在main()结束时停止性能分析
+	defer stopper.Stop()
+
+	//r := readability.FromURL("https://blog.csdn.net/alvine008/article/details/51282868", time.Second*3)
 	r := readability.FromURL("https://mp.weixin.qq.com/s?src=11&timestamp=1561273013&ver=1685&signature=wLwncgbNaHOci0d*RiI1L49pPp1aw-wXgYoCNQjLG2tyDyK92tGy-YRc1mNeZz1LstaGoWlF9exPzFapdqVkD*r-6HAEhCZ2QW7uj*Va79CaF6TzHPy5VgQhlfAeFqUa&new=1", time.Second*3)
 	//r := readability.FromURL("https://www.baidu.com/link?url=sxfIBe7sLxoSFhGklac_DwnHsmjVfJbeq_UpJdA59JDOP2s2Svr5znv-K7m-Prwd&wd=&eqid=b42f79ff00072352000000045d0e3f9c",time.Second*3)
-	log.Println(r.Content)
-	log.Println(r.Text())
+	errors.P(r.Copy())
+
 }
 
 func TestFromReader(t *testing.T) {
+	// 开始性能分析, 返回一个停止接口
+	stopper := profile.Start(profile.CPUProfile, profile.ProfilePath("."))
+	// 在main()结束时停止性能分析
+	defer stopper.Stop()
+
 	defer errors.Debug()
 
-	r := readability.FromReader(strings.NewReader(_html), "https://mp.weixin.qq.com/s?src=11&timestamp=1561269601&ver=1685&signature=FULx07XZtouH81wdQUDPoNqxdvLWvA5OgdS4nyV4uB4pmqKWaWXFpQ0kRgwc2BKJhURdFnJteKi0hpVl9*EFGyThGzaZFcrfH5Lo0VmUCJ68jqw22qd7PaN8r4g483GG&new=1")
-	errors.P(r.Copy())
+	for i := 0; i < 1000; i++ {
+		readability.FromReader(strings.NewReader(_html), "https://mp.weixin.qq.com/s?src=11&timestamp=1561269601&ver=1685&signature=FULx07XZtouH81wdQUDPoNqxdvLWvA5OgdS4nyV4uB4pmqKWaWXFpQ0kRgwc2BKJhURdFnJteKi0hpVl9*EFGyThGzaZFcrfH5Lo0VmUCJ68jqw22qd7PaN8r4g483GG&new=1")
+		//errors.P(r.Copy())
+	}
+
 }
 
 const _html = `
