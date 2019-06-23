@@ -1,6 +1,7 @@
 package readability
 
 import (
+	"encoding/json"
 	"fmt"
 	"github.com/pubgo/errors"
 	shtml "html"
@@ -11,6 +12,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 
 	"golang.org/x/net/html"
 )
@@ -75,16 +77,35 @@ type parseAttempt struct {
 
 // Article is the final readable content.
 type Article struct {
-	Title       string
-	Byline      string
-	Node        *html.Node
-	Content     string
-	TextContent string
-	Length      int
-	Excerpt     string
-	SiteName    string
-	Image       string
-	Favicon     string
+	Title    string     `json:"title,omitempty"`
+	Byline   string     `json:"by_line,omitempty"`
+	Node     *html.Node `json:"-,omitempty"`
+	Content  string     `json:"content,omitempty"`
+	Excerpt  string     `json:"excerpt,omitempty"`
+	SiteName string     `json:"site_name,omitempty"`
+	Image    string     `json:"image,omitempty"`
+	Favicon  string     `json:"favicon,omitempty"`
+}
+
+func (t *Article) Text() string {
+	return strings.TrimSpace(textContent(t.Node))
+}
+
+func (t *Article) String() string {
+	defer errors.Handle(func() {})
+
+	t.Node = nil
+	dt, err := json.Marshal(t)
+	errors.Panic(err)
+	return string(dt)
+}
+
+func (t *Article) Copy() *Article {
+	defer errors.Handle(func() {})
+
+	_a := *t
+	_a.Node = nil
+	return &_a
 }
 
 // Parser is the parser that parses the page to get the readable content.
@@ -115,16 +136,32 @@ type Parser struct {
 	flags           flags
 }
 
-// NewParser returns new Parser which set up with default value.
-func NewParser() Parser {
-	return Parser{
-		MaxElemsToParse:   0,
-		NTopCandidates:    5,
-		CharThresholds:    500,
-		ClassesToPreserve: []string{"page"},
-		TagsToScore:       []string{"section", "h2", "h3", "h4", "h5", "h6", "p", "td", "pre"},
-		Debug:             false,
-	}
+var _parserPool = &sync.Pool{
+	New: func() interface{} {
+		return &Parser{
+			MaxElemsToParse:   0,
+			NTopCandidates:    5,
+			CharThresholds:    500,
+			ClassesToPreserve: []string{"page"},
+			TagsToScore: []string{
+				"section", "h1", "h2", "h3", "h4", "h5", "h6",
+				"p", "td", "pre",
+			},
+			Debug: false,
+		}
+	},
+}
+
+func NewParser() *Parser {
+	defer errors.Handle(func() {})
+
+	return _parserPool.Get().(*Parser)
+}
+
+func (ps *Parser) free() {
+	defer errors.Handle(func() {})
+
+	_parserPool.Put(ps)
 }
 
 // postProcessContent runs any post-process modifications to article
@@ -172,6 +209,8 @@ func (ps *Parser) forEachNode(nodeList []*html.Node, fn func(*html.Node, int)) {
 // someNode iterates over a NodeList, return true if any of the
 // provided iterate function calls returns true, false otherwise.
 func (ps *Parser) someNode(nodeList []*html.Node, fn func(*html.Node) bool) bool {
+	defer errors.Handle(func() {})
+
 	for i := 0; i < len(nodeList); i++ {
 		if fn(nodeList[i]) {
 			return true
@@ -183,6 +222,8 @@ func (ps *Parser) someNode(nodeList []*html.Node, fn func(*html.Node) bool) bool
 // everyNode iterates over a NodeList, return true if all of the
 // provided iterate function calls returns true, false otherwise.
 func (ps *Parser) everyNode(nodeList []*html.Node, fn func(*html.Node) bool) bool {
+	defer errors.Handle(func() {})
+
 	for i := 0; i < len(nodeList); i++ {
 		if !fn(nodeList[i]) {
 			return false
@@ -202,6 +243,8 @@ func (ps *Parser) concatNodeLists(nodeLists ...[]*html.Node) []*html.Node {
 
 // getAllNodesWithTag returns all nodes that has tag inside tagNames.
 func (ps *Parser) getAllNodesWithTag(node *html.Node, tagNames ...string) []*html.Node {
+	defer errors.Handle(func() {})
+
 	var result []*html.Node
 	for i := 0; i < len(tagNames); i++ {
 		result = append(result, getElementsByTagName(node, tagNames[i])...)
@@ -213,6 +256,8 @@ func (ps *Parser) getAllNodesWithTag(node *html.Node, tagNames ...string) []*htm
 // given subtree, except those that match CLASSES_TO_PRESERVE and the
 // classesToPreserve array from the options object.
 func (ps *Parser) cleanClasses(node *html.Node) {
+	defer errors.Handle(func() {})
+
 	nodeClassName := className(node)
 	preservedClassName := []string{}
 	for _, class := range strings.Fields(nodeClassName) {
@@ -235,6 +280,8 @@ func (ps *Parser) cleanClasses(node *html.Node) {
 // fixRelativeURIs converts each <a> and <img> uri in the given element
 // to an absolute URI, ignoring #ref URIs.
 func (ps *Parser) fixRelativeURIs(articleContent *html.Node) {
+	defer errors.Handle(func() {})
+
 	links := ps.getAllNodesWithTag(articleContent, "a")
 	ps.forEachNode(links, func(link *html.Node, _ int) {
 		href := getAttribute(link, "href")
@@ -276,6 +323,8 @@ func (ps *Parser) fixRelativeURIs(articleContent *html.Node) {
 
 // getArticleTitle attempts to get the article title.
 func (ps *Parser) getArticleTitle() string {
+	defer errors.Handle(func() {})
+
 	doc := ps.doc
 	curTitle := ""
 	origTitle := ""
@@ -353,6 +402,8 @@ func (ps *Parser) getArticleTitle() string {
 // This includes things like stripping javascript, CSS, and handling
 // terrible markup.
 func (ps *Parser) prepDocument() {
+	defer errors.Handle(func() {})
+
 	doc := ps.doc
 
 	// Remove all style tags in head
@@ -369,6 +420,8 @@ func (ps *Parser) prepDocument() {
 // ignoring whitespace in between. If the given node is an element, the
 // same node is returned.
 func (ps *Parser) nextElement(node *html.Node) *html.Node {
+	defer errors.Handle(func() {})
+
 	next := node
 	for next != nil && next.Type != html.ElementNode && rxWhitespace.MatchString(textContent(next)) {
 		next = next.NextSibling
@@ -382,6 +435,8 @@ func (ps *Parser) nextElement(node *html.Node) *html.Node {
 // will become:
 //   <div>foo<br>bar<p>abc</p></div>
 func (ps *Parser) replaceBrs(elem *html.Node) {
+	defer errors.Handle(func() {})
+
 	ps.forEachNode(ps.getAllNodesWithTag(elem, "br"), func(br *html.Node, _ int) {
 		next := br.NextSibling
 
@@ -452,6 +507,8 @@ func (ps *Parser) setNodeTag(node *html.Node, newTagName string) {
 // prepArticle prepares the article node for display. Clean out any
 // inline styles, iframes, forms, strip extraneous <p> tags, etc.
 func (ps *Parser) prepArticle(articleContent *html.Node) {
+	defer errors.Handle(func() {})
+
 	ps.cleanStyles(articleContent)
 
 	// Check for data tables before we continue, to avoid removing
@@ -562,6 +619,8 @@ func (ps *Parser) prepArticle(articleContent *html.Node) {
 // initializeNode initializes a node with the readability score.
 // Also checks the className/id for special names to add to its score.
 func (ps *Parser) initializeNode(node *html.Node) {
+	defer errors.Handle(func() {})
+
 	contentScore := float64(ps.getClassWeight(node))
 	switch tagName(node) {
 	case "div":
@@ -579,6 +638,8 @@ func (ps *Parser) initializeNode(node *html.Node) {
 
 // removeAndGetNext remove node and returns its next node.
 func (ps *Parser) removeAndGetNext(node *html.Node) *html.Node {
+	defer errors.Handle(func() {})
+
 	nextNode := ps.getNextNode(node, true)
 	if node.Parent != nil {
 		node.Parent.RemoveChild(node)
@@ -593,6 +654,8 @@ func (ps *Parser) removeAndGetNext(node *html.Node) *html.Node {
 // depth-first.
 // In Readability.js, ignoreSelfAndKids default to false.
 func (ps *Parser) getNextNode(node *html.Node, ignoreSelfAndKids bool) *html.Node {
+	defer errors.Handle(func() {})
+
 	// First check for kids if those aren't being ignored
 	if firstChild := firstElementChild(node); !ignoreSelfAndKids && firstChild != nil {
 		return firstChild
@@ -622,6 +685,8 @@ func (ps *Parser) getNextNode(node *html.Node, ignoreSelfAndKids bool) *html.Nod
 
 // checkByline determines if a node is used as byline.
 func (ps *Parser) checkByline(node *html.Node, matchString string) bool {
+	defer errors.Handle(func() {})
+
 	if ps.articleByline != "" {
 		return false
 	}
@@ -1132,7 +1197,7 @@ func (ps *Parser) getArticleMetadata() map[string]string {
 		if content == "" {
 			return
 		}
-		matches := []string{}
+		var matches []string
 		name := ""
 
 		if elementProperty != "" {
@@ -1160,8 +1225,14 @@ func (ps *Parser) getArticleMetadata() map[string]string {
 	// get title
 	metadataTitle := ""
 	possibleAttrNames := []string{
-		"dc:title", "dcterm:title", "og:title", "weibo:article:title",
-		"weibo:webpage:title", "title", "twitter:title"}
+		"dc:title",
+		"dcterm:title",
+		"og:title",
+		"weibo:article:title",
+		"weibo:webpage:title",
+		"title",
+		"twitter:title",
+	}
 	for _, name := range possibleAttrNames {
 		if value, ok := values[name]; ok {
 			metadataTitle = value
@@ -1186,9 +1257,14 @@ func (ps *Parser) getArticleMetadata() map[string]string {
 	// get description
 	metadataExcerpt := ""
 	possibleAttrNames = []string{
-		"dc:description", "dcterm:description", "og:description",
-		"weibo:article:description", "weibo:webpage:description",
-		"description", "twitter:description"}
+		"dc:description",
+		"dcterm:description",
+		"og:description",
+		"weibo:article:description",
+		"weibo:webpage:description",
+		"description",
+		"twitter:description",
+	}
 	for _, name := range possibleAttrNames {
 		if value, ok := values[name]; ok {
 			metadataExcerpt = value
@@ -1201,7 +1277,11 @@ func (ps *Parser) getArticleMetadata() map[string]string {
 
 	// get image thumbnail
 	metadataImage := ""
-	possibleAttrNames = []string{"og:image", "image", "twitter:image"}
+	possibleAttrNames = []string{
+		"og:image",
+		"image",
+		"twitter:image",
+	}
 	for _, name := range possibleAttrNames {
 		if value, ok := values[name]; ok {
 			metadataImage = toAbsoluteURI(value, ps.documentURI)
@@ -1641,6 +1721,8 @@ func (ps *Parser) cleanConditionally(element *html.Node, tag string) {
 // cleanMatchedNodes cleans out elements whose id/class
 // combinations match specific string.
 func (ps *Parser) cleanMatchedNodes(e *html.Node, filter func(*html.Node, string) bool) {
+	defer errors.Handle(func() {})
+
 	endOfSearchMarkerNode := ps.getNextNode(e, true)
 	next := ps.getNextNode(e, false)
 	for next != nil && next != endOfSearchMarkerNode {
@@ -1655,6 +1737,8 @@ func (ps *Parser) cleanMatchedNodes(e *html.Node, filter func(*html.Node, string
 // cleanHeaders cleans out spurious headers from an Element.
 // Checks things like classnames and link density.
 func (ps *Parser) cleanHeaders(e *html.Node) {
+	defer errors.Handle(func() {})
+
 	for headerIndex := 1; headerIndex < 3; headerIndex++ {
 		headerTag := fmt.Sprintf("h%d", headerIndex)
 		ps.removeNodes(getElementsByTagName(e, headerTag), func(header *html.Node) bool {
@@ -1670,7 +1754,9 @@ func (ps *Parser) isProbablyVisible(node *html.Node) bool {
 }
 
 // Parse parses input and find the main readable content.
-func (ps *Parser) Parse(input io.Reader, pageURL string) Article {
+func (ps *Parser) Parse(input io.Reader, pageURL string) *Article {
+	defer errors.Handle(func() {})
+
 	// Reset parser data
 	ps.articleTitle = ""
 	ps.articleByline = ""
@@ -1710,7 +1796,6 @@ func (ps *Parser) Parse(input io.Reader, pageURL string) Article {
 
 	// Try to grab article content
 	finalHTMLContent := ""
-	finalTextContent := ""
 	articleContent := ps.grabArticle()
 	var readableNode *html.Node
 
@@ -1728,9 +1813,7 @@ func (ps *Parser) Parse(input io.Reader, pageURL string) Article {
 		}
 
 		readableNode = firstElementChild(articleContent)
-		finalHTMLContent = innerHTML(articleContent)
-		finalTextContent = textContent(articleContent)
-		finalTextContent = strings.TrimSpace(finalTextContent)
+		finalHTMLContent = strings.TrimSpace(innerHTML(articleContent))
 	}
 
 	finalByline := metadata["byline"]
@@ -1743,101 +1826,16 @@ func (ps *Parser) Parse(input io.Reader, pageURL string) Article {
 	excerpt := strings.TrimSpace(metadata["excerpt"])
 	excerpt = strings.Join(strings.Fields(excerpt), " ")
 
-	return Article{
-		Title:       ps.articleTitle,
-		Byline:      finalByline,
-		Node:        readableNode,
-		Content:     finalHTMLContent,
-		TextContent: finalTextContent,
-		Length:      len(finalTextContent),
-		Excerpt:     excerpt,
-		SiteName:    metadata["siteName"],
-		Image:       metadata["image"],
-		Favicon:     metadata["favicon"],
+	return &Article{
+		Title:    ps.articleTitle,
+		Byline:   finalByline,
+		Node:     readableNode,
+		Content:  finalHTMLContent,
+		Excerpt:  excerpt,
+		SiteName: metadata["siteName"],
+		Image:    metadata["image"],
+		Favicon:  metadata["favicon"],
 	}
-}
-
-// IsReadable decides whether or not the document is reader-able
-// without parsing the whole thing. In `mozilla/readability`,
-// this method is located in `Readability-readable.js`.
-func (ps *Parser) IsReadable(input io.Reader) bool {
-	// Parse input
-	doc, err := html.Parse(input)
-	if err != nil {
-		return false
-	}
-
-	// Get <p> and <pre> nodes.
-	// Also get <div> nodes which have <br> node(s) and append
-	// them into the `nodes` variable.
-	// Some articles' DOM structures might look like :
-	//
-	// <div>
-	//     Sentences<br>
-	//     <br>
-	//     Sentences<br>
-	// </div>
-	//
-	// So we need to make sure only fetch the div once.
-	// To do so, we will use map as dictionary.
-	nodeList := make([]*html.Node, 0)
-	nodeDict := make(map[*html.Node]struct{})
-	var finder func(*html.Node)
-
-	finder = func(node *html.Node) {
-		if node.Type == html.ElementNode {
-			tag := tagName(node)
-			if tag == "p" || tag == "pre" {
-				if _, exist := nodeDict[node]; !exist {
-					nodeList = append(nodeList, node)
-					nodeDict[node] = struct{}{}
-				}
-			} else if tag == "br" && node.Parent != nil && tagName(node.Parent) == "div" {
-				if _, exist := nodeDict[node.Parent]; !exist {
-					nodeList = append(nodeList, node.Parent)
-					nodeDict[node.Parent] = struct{}{}
-				}
-			}
-		}
-
-		for child := node.FirstChild; child != nil; child = child.NextSibling {
-			finder(child)
-		}
-	}
-
-	finder(doc)
-
-	// This is a little cheeky, we use the accumulator 'score'
-	// to decide what to return from this callback.
-	score := float64(0)
-	return ps.someNode(nodeList, func(node *html.Node) bool {
-		if !ps.isProbablyVisible(node) {
-			return false
-		}
-
-		matchString := className(node) + " " + id(node)
-		if rxUnlikelyCandidates.MatchString(matchString) &&
-			!rxOkMaybeItsACandidate.MatchString(matchString) {
-			return false
-		}
-
-		if tagName(node) == "p" && ps.hasAncestorTag(node, "li", -1, nil) {
-			return false
-		}
-
-		nodeText := strings.TrimSpace(textContent(node))
-		nodeTextLength := len(nodeText)
-		if nodeTextLength < 140 {
-			return false
-		}
-
-		score += math.Sqrt(float64(nodeTextLength - 140))
-		if score > 20 {
-			return true
-		}
-
-		return false
-	})
 }
 
 // ====================== INFORMATION ======================
@@ -1862,7 +1860,11 @@ func (ps *Parser) getArticleFavicon() string {
 		linkHref := strings.TrimSpace(getAttribute(link, "href"))
 		linkSizes := strings.TrimSpace(getAttribute(link, "sizes"))
 
-		if linkHref == "" || !strings.Contains(linkRel, "icon") {
+		if linkHref == "" {
+			return
+		}
+
+		if !strings.Contains(linkRel, "icon") {
 			return
 		}
 

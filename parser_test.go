@@ -22,7 +22,7 @@ func getNodeExcerpt(node *html.Node) string {
 }
 
 func compareArticleContent(result, expected *html.Node) {
-	defer errors.Handle()
+	defer errors.Handle(func() {})
 
 	// Make sure number of nodes is same
 	resultNodesCount := len(children(result))
@@ -94,12 +94,14 @@ func compareArticleContent(result, expected *html.Node) {
 	}
 }
 
-func Test_parser(t *testing.T) {
+func TestParser(t *testing.T) {
+	errors.Cfg.Debug=true
+
+	defer errors.Debug()
+
 	testDir := "test-pages"
 	testItems, err := ioutil.ReadDir(testDir)
-	if err != nil {
-		t.Errorf("\nfailed to read test directory")
-	}
+	errors.Wrap(err,"failed to read test directory")
 
 	for _, item := range testItems {
 		if !item.IsDir() {
@@ -107,6 +109,8 @@ func Test_parser(t *testing.T) {
 		}
 
 		t.Run(item.Name(), func(t1 *testing.T) {
+			defer errors.Debug()
+
 			// Open test file
 			testFilePath := fp.Join(testDir, item.Name(), "source.html")
 			testFile, err := os.Open(testFilePath)
@@ -120,7 +124,7 @@ func Test_parser(t *testing.T) {
 			expectedFile, err := os.Open(expectedFilePath)
 			errors.Wrap(err, "failed to open expected result file")
 
-			defer errors.Panic(expectedFile.Close())
+			defer expectedFile.Close()
 
 			// Parse expected result
 			expectedHTML, err := html.Parse(expectedFile)
@@ -137,4 +141,8 @@ func Test_parser(t *testing.T) {
 			compareArticleContent(resultHTML, expectedHTML)
 		})
 	}
+}
+
+func TestA1(t *testing.T) {
+
 }

@@ -2,10 +2,12 @@ package readability
 
 import (
 	"github.com/pubgo/errors"
+	"log"
 	"net/url"
 	"os"
 	"strings"
 
+	"github.com/PuerkitoBio/purell"
 	"golang.org/x/net/html"
 )
 
@@ -29,7 +31,7 @@ func wordCount(str string) int {
 // toAbsoluteURI convert uri to absolute path based on base.
 // However, if uri is prefixed with hash (#), the uri won't be changed.
 func toAbsoluteURI(uri string, base *url.URL) string {
-	defer errors.Handle()
+	defer errors.Handle(func() {})
 
 	if uri == "" || base == nil {
 		return ""
@@ -56,7 +58,7 @@ func toAbsoluteURI(uri string, base *url.URL) string {
 // renderToFile ender an element and save it to file.
 // It will panic if it fails to create destination file.
 func renderToFile(element *html.Node, filename string) {
-	defer errors.Handle()
+	defer errors.Handle(func() {})
 
 	dstFile, err := os.Create(filename)
 	errors.Wrap(err, "failed to create file")
@@ -64,4 +66,48 @@ func renderToFile(element *html.Node, filename string) {
 	defer errors.Panic(dstFile.Close())
 
 	errors.Panic(html.Render(dstFile, element))
+}
+
+func ToAbsoluteURI(u string, base string) string {
+	defer errors.Handle(func() {})
+
+	u = strings.ReplaceAll(strings.TrimSpace(u), " ", "")
+
+	if u == "" {
+		if Cfg.Debug {
+			log.Println("url is null")
+		}
+
+		return ""
+	}
+
+	// If it is hash tag, return as it is
+	if u[:1] == "#" {
+		return u
+	}
+
+	if strings.HasPrefix(u, "data") {
+		if Cfg.Debug {
+			log.Println("url HasPrefix data")
+		}
+		return ""
+	}
+
+	// If it is already an absolute URL, return as it is
+	_url, err := url.ParseRequestURI(u)
+	errors.Wrap(err, "url ParseRequestURI error")
+	if err == nil && _url.Scheme != "" && _url.Hostname() != "" {
+		return u
+	}
+
+	// Otherwise, resolve against base URI.
+	baseUri, err := url.Parse(base)
+	errors.Wrap(err, "url parse error,url(%s)", u)
+
+	_u, err := purell.NormalizeURLString(
+		baseUri.ResolveReference(_url).String(),
+		purell.FlagsUsuallySafeGreedy|purell.FlagRemoveDuplicateSlashes|purell.FlagRemoveFragment,
+	)
+	errors.Wrap(err, "purell NormalizeURLString error")
+	return _u
 }

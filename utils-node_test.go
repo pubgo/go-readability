@@ -10,7 +10,7 @@ import (
 )
 
 func openTestFile(path string) *html.Node {
-	defer errors.Handle()
+	defer errors.Handle(func() {})
 
 	testFile, err := os.Open(path)
 	errors.Wrap(err, "failed to open test file")
