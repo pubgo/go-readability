@@ -7,12 +7,7 @@ import (
 )
 
 func main() {
-	rootCmd := cmds.RootCmd
-	rootCmd.AddCommand(
-		cmds.GoReadabilityCmd,
-	)
-
-	errors.ErrHandle(rootCmd.Execute(), func(err *errors.Err) {
+	errors.ErrHandle(cmds.GoReadabilityCmd.Execute(), func(err *errors.Err) {
 		err.P()
 		os.Exit(-1)
 	})

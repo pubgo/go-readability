@@ -18,7 +18,7 @@ func initGoReadabilityCmd(cmd *cobra.Command) *cobra.Command {
 }
 
 var GoReadabilityCmd = initGoReadabilityCmd(&cobra.Command{
-	Use:   "go-readability [flags] source",
+	Use:   "readability [flags] source",
 	Args:  cobra.ExactArgs(1),
 	Run:   rootCmdHandler,
 	Short: "go-readability is parser to fetch readable content of a web page",
