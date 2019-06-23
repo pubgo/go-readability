@@ -14,8 +14,8 @@ import (
 	"github.com/pkg/profile"
 	"github.com/pubgo/errors"
 	"github.com/pubgo/go-readability"
+	"github.com/pubgo/gotask"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 )
@@ -43,17 +43,16 @@ func TestFromReader(t *testing.T) {
 	// 在main()结束时停止性能分析
 	defer stopper.Stop()
 
-	wg := sync.WaitGroup{}
-	for i := 0; i < 100; i++ {
-		//go func() {
-		//	wg.Add(1)
-			readability.FromReader(strings.NewReader(_html), "http://news.mydrivers.com/blog/20140212.htm")
-			//wg.Done()
-		//}()
-		//errors.P(r.Copy())
-	}
-	wg.Wait()
+	_fn := gotask.TaskOf(func() {
+		readability.FromReader(strings.NewReader(_html), "http://news.mydrivers.com/blog/20140212.htm")
+	})
 
+	task := gotask.NewTask(4, time.Second*3)
+
+	for i := 0; i < 100; i++ {
+		errors.Panic(task.Do(_fn))
+	}
+	task.Wait()
 }
 
 const _html = `

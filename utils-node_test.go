@@ -14,7 +14,7 @@ func openTestFile(path string) *html.Node {
 
 	testFile, err := os.Open(path)
 	errors.Wrap(err, "failed to open test file")
-	defer errors.Panic(testFile.Close())
+	defer testFile.Close()
 
 	doc, err := html.Parse(testFile)
 	errors.Wrap(err, "failed to parse test file")
@@ -23,6 +23,8 @@ func openTestFile(path string) *html.Node {
 }
 
 func Test_getElementsByTagName(t *testing.T) {
+	defer errors.Debug()
+
 	doc := openTestFile("test-pages/nodes.html")
 
 	html := doc.FirstChild
