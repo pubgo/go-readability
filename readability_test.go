@@ -26,6 +26,11 @@ import (
 func TestFromURL(t *testing.T) {
 	defer errors.Debug()
 
+	/*
+	<meta name="keywords" content="研究观点,艾瑞网,艾瑞咨询,新经济门户,互联网数据资讯">
+	<meta name="description" content="研究观点,艾瑞网聚合互联网数据资讯,融合互联网行业资源">
+	*/
+
 	r := readability.FromURL("https://blog.csdn.net/alvine008/article/details/51282868", time.Second*3)
 	//r := readability.FromURL("https://mp.weixin.qq.com/s?src=11&timestamp=1561273013&ver=1685&signature=wLwncgbNaHOci0d*RiI1L49pPp1aw-wXgYoCNQjLG2tyDyK92tGy-YRc1mNeZz1LstaGoWlF9exPzFapdqVkD*r-6HAEhCZ2QW7uj*Va79CaF6TzHPy5VgQhlfAeFqUa&new=1", time.Second*3)
 	//r := readability.FromURL("https://www.baidu.com/link?url=sxfIBe7sLxoSFhGklac_DwnHsmjVfJbeq_UpJdA59JDOP2s2Svr5znv-K7m-Prwd&wd=&eqid=b42f79ff00072352000000045d0e3f9c",time.Second*3)
