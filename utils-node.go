@@ -2,6 +2,7 @@ package readability
 
 import (
 	"bytes"
+	"github.com/pubgo/errors"
 	"strings"
 
 	"golang.org/x/net/html"
@@ -120,9 +121,10 @@ func hasAttribute(node *html.Node, attrName string) bool {
 // textContent returns the text content of the specified node,
 // and all its descendants.
 func textContent(node *html.Node) string {
-	var buffer bytes.Buffer
-	var finder func(*html.Node)
+	var buffer = &strings.Builder{}
+	defer buffer.Reset()
 
+	var finder func(*html.Node)
 	finder = func(n *html.Node) {
 		if n.Type == html.TextNode {
 			buffer.WriteString(n.Data)
@@ -149,14 +151,13 @@ func outerHTML(node *html.Node) string {
 
 // innerHTML returns the HTML content (inner HTML) of an element.
 func innerHTML(node *html.Node) string {
-	var err error
-	var buffer bytes.Buffer
+	defer errors.Handle()()
+
+	var buffer = &strings.Builder{}
+	defer buffer.Reset()
 
 	for child := node.FirstChild; child != nil; child = child.NextSibling {
-		err = html.Render(&buffer, child)
-		if err != nil {
-			return ""
-		}
+		errors.Wrap(html.Render(buffer, child), "innerHTML Render error")
 	}
 
 	return strings.TrimSpace(buffer.String())

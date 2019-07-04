@@ -13,7 +13,7 @@ import (
 )
 
 func getNodeExcerpt(node *html.Node) string {
-	defer errors.Handle(func() {})
+	defer errors.Handle()()
 
 	outer := outerHTML(node)
 	outer = strings.Join(strings.Fields(outer), " ")
@@ -24,7 +24,7 @@ func getNodeExcerpt(node *html.Node) string {
 }
 
 func compareArticleContent(result, expected *html.Node) {
-	defer errors.Handle(func() {})
+	defer errors.Handle()()
 
 	// Make sure number of nodes is same
 	resultNodesCount := len(children(result))

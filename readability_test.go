@@ -27,8 +27,8 @@ func TestFromURL(t *testing.T) {
 	defer errors.Debug()
 
 	/*
-	<meta name="keywords" content="研究观点,艾瑞网,艾瑞咨询,新经济门户,互联网数据资讯">
-	<meta name="description" content="研究观点,艾瑞网聚合互联网数据资讯,融合互联网行业资源">
+		<meta name="keywords" content="研究观点,艾瑞网,艾瑞咨询,新经济门户,互联网数据资讯">
+		<meta name="description" content="研究观点,艾瑞网聚合互联网数据资讯,融合互联网行业资源">
 	*/
 
 	r := readability.FromURL("https://blog.csdn.net/alvine008/article/details/51282868", time.Second*3)
@@ -48,14 +48,15 @@ func TestFromReader(t *testing.T) {
 	// 在main()结束时停止性能分析
 	defer stopper.Stop()
 
-	_fn := gotask.TaskOf(func() {
-		readability.FromReader(strings.NewReader(_html), "http://news.mydrivers.com/blog/20140212.htm")
+	gotask.TaskRegistry("fn", func() {
+		art:=readability.FromReader(strings.NewReader(_html), "http://news.mydrivers.com/blog/20140212.htm")
+		errors.P(art.Copy())
 	})
 
 	task := gotask.NewTask(4, time.Second*3)
 
 	for i := 0; i < 100; i++ {
-		errors.Panic(task.Do(_fn))
+		task.Do("fn")
 	}
 	task.Wait()
 }

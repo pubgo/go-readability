@@ -31,7 +31,7 @@ func wordCount(str string) int {
 // renderToFile ender an element and save it to file.
 // It will panic if it fails to create destination file.
 func renderToFile(element *html.Node, filename string) {
-	defer errors.Handle(func() {})
+	defer errors.Handle()()
 
 	dstFile, err := os.Create(filename)
 	errors.Wrap(err, "failed to create file")
@@ -42,7 +42,7 @@ func renderToFile(element *html.Node, filename string) {
 }
 
 func ToAbsoluteURI(u string, base *url.URL) string {
-	defer errors.Handle(func() {})
+	defer errors.Handle()()
 
 	u = strings.ReplaceAll(strings.TrimSpace(u), " ", "")
 

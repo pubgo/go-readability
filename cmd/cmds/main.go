@@ -27,7 +27,7 @@ var GoReadabilityCmd = initGoReadabilityCmd(&cobra.Command{
 })
 
 func rootCmdHandler(cmd *cobra.Command, args []string) {
-	defer errors.Handle(func() {})
+	defer errors.Handle()()
 
 	// Get cmd parameter
 	srcPath := args[0]

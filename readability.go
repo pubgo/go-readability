@@ -21,7 +21,7 @@ import (
 // readable content. It's the wrapper for `Parser.Parse()` and useful
 // if you only want to use the default parser.
 func FromReader(input io.Reader, pageURL string) (art *Article) {
-	defer errors.Handle(func() {})
+	defer errors.Handle()()
 
 	p := NewParser()
 	art = p.Parse(input, pageURL)
@@ -33,7 +33,7 @@ func FromReader(input io.Reader, pageURL string) (art *Article) {
 // FromURL fetch the web page from specified url, check if it's
 // readable, then parses the response to find the readable content.
 func FromURL(pageURL string, timeout time.Duration) (art *Article) {
-	defer errors.Handle(func() {})
+	defer errors.Handle()()
 
 	// Make sure URL is valid
 	_, err := url.ParseRequestURI(pageURL)
