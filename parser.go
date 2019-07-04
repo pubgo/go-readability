@@ -34,7 +34,7 @@ var (
 	rxPrevLink             = regexp.MustCompile(`(?i)(prev|earl|old|new|<|«)`)
 	rxWhitespace           = regexp.MustCompile(`(?i)^\s*$`)
 	rxHasContent           = regexp.MustCompile(`(?i)\S$`)
-	rxPropertyPattern      = regexp.MustCompile(`(?i)\s*(dc|dcterm|og|twitter)\s*:\s*(author|creator|description|title|site_name|image\S*)\s*`)
+	rxPropertyPattern      = regexp.MustCompile(`(?i)\s*(dc|dcterm|og|twitter|article)\s*:\s*(tag|author|creator|description|title|site_name|image\S*)\s*`)
 	rxNamePattern          = regexp.MustCompile(`(?i)^\s*(?:(dc|dcterm|og|twitter|weibo:(article|webpage))\s*[\.:]\s*)?(author|creator|description|title|site_name|image)\s*$`)
 	rxTitleSeparator       = regexp.MustCompile(`(?i) [\|\-\\/>»] `)
 	rxTitleHierarchySep    = regexp.MustCompile(`(?i) [\\/>»] `)
@@ -398,7 +398,10 @@ func (ps *Parser) getArticleTitle() string {
 				curTitle = t
 			}
 		})
+	}
 
+	if curTitle == "" {
+		c := goquery.NewDocumentFromNode(doc)
 		c.Find("h2").Each(func(i int, selection *goquery.Selection) {
 			if t := strings.TrimSpace(selection.Text()); t != "" {
 				curTitle = t
@@ -706,11 +709,8 @@ func (ps *Parser) checkByline(node *html.Node, matchString string) bool {
 	rel := getAttribute(node, "rel")
 	itemprop := getAttribute(node, "itemprop")
 	nodeText := textContent(node)
-	if (rel == "author" || strings.Contains(itemprop, "author") || rxByline.MatchString(matchString)) &&
-		ps.isValidByline(nodeText) {
-		nodeText = strings.TrimSpace(nodeText)
-		nodeText = strings.Join(strings.Fields(nodeText), " ")
-		ps.articleByline = nodeText
+	if (rel == "author" || strings.Contains(itemprop, "author") || rxByline.MatchString(matchString)) && ps.isValidByline(nodeText) {
+		ps.articleByline = strings.Join(strings.Fields(strings.TrimSpace(nodeText)), " ")
 		return true
 	}
 
@@ -790,7 +790,7 @@ func (ps *Parser) grabArticle() *html.Node {
 			// content(e.g. text, image, video, or iframe).
 			switch nodeTagName {
 			case "div", "section", "header",
-				"h1", "h2", "h3", "h4", "h5", "h6":
+				"h1", "h2", "h3", "h4", "h5", "h6" ,"li", "ul":
 				if ps.isElementWithoutContent(node) {
 					node = ps.removeAndGetNext(node)
 					continue
@@ -1203,6 +1203,7 @@ func (ps *Parser) getArticleMetadata() map[string][]string {
 	defer errors.Handle()()
 
 	metas := make(map[string][]string)
+
 	// Find description tags.
 	ps.forEachNode(getElementsByTagName(ps.doc, "meta"), func(element *html.Node, _ int) {
 		if _cs := getAttribute(element, "charset"); _cs != "" {
@@ -1215,15 +1216,21 @@ func (ps *Parser) getArticleMetadata() map[string][]string {
 			return
 		}
 
-		elementProperty := getAttribute(element, "property")
+		elementProperty := strings.TrimSpace(getAttribute(element, "property"))
 		if elementProperty != "" {
 			matches := rxPropertyPattern.FindAllString(elementProperty, -1)
 			for i := len(matches) - 1; i >= 0; i-- {
 				// Convert to lowercase, and remove any whitespace
 				// so we can match belops.
-				names := strings.Split(strings.ToLower(strings.Join(strings.Fields(matches[i]), "")), ":")
-				name := names[len(names)-1]
+				name := strings.ToLower(strings.Join(strings.Fields(matches[i]), ""))
 				// multiple authors
+
+				if name == "" {
+					continue
+				}
+
+				fmt.Println("elementProperty", name, content)
+
 				metas[name] = append(metas[name], strings.TrimSpace(content))
 			}
 		}
@@ -1232,10 +1239,8 @@ func (ps *Parser) getArticleMetadata() map[string][]string {
 		if elementName != "" && rxNamePattern.MatchString(elementName) {
 			// Convert to lowercase, remove any whitespace, and convert
 			// dots to colons so we can match belops.
-			name := strings.ToLower(elementName)
-			name = strings.Join(strings.Fields(name), "")
-			names := strings.Split(name, ".")
-			name = names[len(names)-1]
+			name := strings.Join(strings.Fields(strings.ToLower(elementName)), "")
+			fmt.Println("elementName", name, content)
 			metas[name] = append(metas[name], strings.TrimSpace(content))
 		}
 	})
@@ -1318,6 +1323,7 @@ func (ps *Parser) getArticleMetadata() map[string][]string {
 	if fav := ps.getArticleFavicon(); fav != "" {
 		metas["favicon"] = []string{fav}
 	}
+
 	// in some sites, excerpt is used with HTML encoding,
 	// so here we unescape it.
 	if _dt, ok := metas["excerpt"]; ok && len(_dt) > 0 {
@@ -1820,10 +1826,9 @@ func (ps *Parser) Parse(input io.Reader, pageURL string) *Article {
 
 	// Fetch metadata
 	metadata := ps.getArticleMetadata()
-	ps.articleTitle = metadata["title"][0]
 
 	// Try to grab article content
-	finalHTMLContent := ""
+	//finalHTMLContent := ""
 	articleContent := ps.grabArticle()
 	//var readableNode *html.Node
 
@@ -1833,16 +1838,18 @@ func (ps *Parser) Parse(input io.Reader, pageURL string) *Article {
 		// If we haven't found an excerpt in the article's metadata,
 		// use the article's first paragraph as the excerpt. This is used
 		// for displaying a preview of the article's content.
-		if len(metadata["excerpt"]) == 0 {
-			paragraphs := getElementsByTagName(articleContent, "p")
-			if len(paragraphs) > 0 {
-				metadata["excerpt"] = []string{strings.TrimSpace(textContent(paragraphs[0]))}
-			}
-		}
+		//if len(metadata["excerpt"]) == 0 {
+		//	paragraphs := getElementsByTagName(articleContent, "p")
+		//	if len(paragraphs) > 0 {
+		//		metadata["excerpt"] = []string{strings.TrimSpace(textContent(paragraphs[0]))}
+		//	}
+		//}
 
 		//readableNode = firstElementChild(articleContent)
-		finalHTMLContent = strings.TrimSpace(innerHTML(articleContent))
+		//finalHTMLContent = strings.TrimSpace(innerHTML(articleContent))
 	}
+
+	fmt.Println(innerHTML(articleContent))
 
 	if len(metadata["byline"]) == 0 {
 		metadata["byline"] = []string{ps.articleByline}
@@ -1853,7 +1860,7 @@ func (ps *Parser) Parse(input io.Reader, pageURL string) *Article {
 	//excerpt := strings.TrimSpace(metadata["excerpt"])
 	//excerpt = strings.Join(strings.Fields(excerpt), " ")
 
-	metadata["content"]=[]string{finalHTMLContent}
+	//metadata["content"]=[]string{finalHTMLContent}
 	errors.P(metadata)
 
 	return &Article{
