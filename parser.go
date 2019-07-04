@@ -422,8 +422,9 @@ func (ps *Parser) prepDocument() {
 
 	nodes := getElementsByTagName(doc, "body")
 	errors.T(len(nodes) > 0 || nodes[0] != nil, "body parse error")
-	ps.replaceBrs(nodes[0])
 
+	//replaceBrs replaces 2 or more successive <br> with a single <p>.
+	ps.replaceBrs(nodes[0])
 	ps.replaceNodeTags(getElementsByTagName(doc, "font"), "span")
 }
 
@@ -1198,15 +1199,14 @@ func (ps *Parser) isValidByline(byline string) bool {
 
 // getArticleMetadata attempts to get excerpt and byline
 // metadata for the article.
-func (ps *Parser) getArticleMetadata() map[string]string {
-	values := make(map[string][]string)
+func (ps *Parser) getArticleMetadata() map[string][]string {
+	defer errors.Handle()()
 
-	var charset string
-
+	metas := make(map[string][]string)
 	// Find description tags.
 	ps.forEachNode(getElementsByTagName(ps.doc, "meta"), func(element *html.Node, _ int) {
 		if _cs := getAttribute(element, "charset"); _cs != "" {
-			charset = _cs
+			metas["charset"] = []string{_cs}
 			return
 		}
 
@@ -1215,19 +1215,16 @@ func (ps *Parser) getArticleMetadata() map[string]string {
 			return
 		}
 
-		var matches []string
-		name := ""
-
 		elementProperty := getAttribute(element, "property")
 		if elementProperty != "" {
-			matches = rxPropertyPattern.FindAllString(elementProperty, -1)
+			matches := rxPropertyPattern.FindAllString(elementProperty, -1)
 			for i := len(matches) - 1; i >= 0; i-- {
 				// Convert to lowercase, and remove any whitespace
 				// so we can match belops.
-				name = strings.ToLower(matches[i])
-				name = strings.Join(strings.Fields(name), "")
+				names := strings.Split(strings.ToLower(strings.Join(strings.Fields(matches[i]), "")), ":")
+				name := names[len(names)-1]
 				// multiple authors
-				values[name] = append(values[name], strings.TrimSpace(content))
+				metas[name] = append(metas[name], strings.TrimSpace(content))
 			}
 		}
 
@@ -1235,100 +1232,101 @@ func (ps *Parser) getArticleMetadata() map[string]string {
 		if elementName != "" && rxNamePattern.MatchString(elementName) {
 			// Convert to lowercase, remove any whitespace, and convert
 			// dots to colons so we can match belops.
-			name = strings.ToLower(elementName)
+			name := strings.ToLower(elementName)
 			name = strings.Join(strings.Fields(name), "")
-			name = strings.Replace(name, ".", ":", -1)
-			values[name] = append(values[name], strings.TrimSpace(content))
+			names := strings.Split(name, ".")
+			name = names[len(names)-1]
+			metas[name] = append(metas[name], strings.TrimSpace(content))
 		}
 	})
 
 	// get title
-	metadataTitle := ""
-	possibleAttrNames := []string{
-		"dc:title",
-		"dcterm:title",
-		"og:title",
-		"weibo:article:title",
-		"weibo:webpage:title",
-		"title",
-		"twitter:title",
-	}
-	for _, name := range possibleAttrNames {
-		if value, ok := values[name]; ok && len(value) > 0 {
-			metadataTitle = value[0]
-			break
-		}
-	}
+	//metadataTitle := ""
+	//possibleAttrNames := []string{
+	//	"dc:title",
+	//	"dcterm:title",
+	//	"og:title",
+	//	"weibo:article:title",
+	//	"weibo:webpage:title",
+	//	"title",
+	//	"twitter:title",
+	//}
+	//for _, name := range possibleAttrNames {
+	//	if value, ok := values[name]; ok && len(value) > 0 {
+	//		metadataTitle = value[0]
+	//		break
+	//	}
+	//}
 
-	if metadataTitle == "" {
-		metadataTitle = ps.getArticleTitle()
+	if _ts, ok := metas["title"]; !ok || len(_ts) == 0 {
+		if metadataTitle := ps.getArticleTitle(); metadataTitle != "" {
+			metas["title"] = append(metas["title"], metadataTitle)
+		}
 	}
 
 	// get author
-	metadataByline := ""
-	possibleAttrNames = []string{"dc:creator", "dcterm:creator", "author"}
-	for _, name := range possibleAttrNames {
-		if value, ok := values[name]; ok && len(value) > 0 {
-			metadataByline = value[0]
-			break
-		}
-	}
+	//metadataByline := ""
+	//possibleAttrNames = []string{"dc:creator", "dcterm:creator", "author"}
+	//for _, name := range possibleAttrNames {
+	//	if value, ok := values[name]; ok && len(value) > 0 {
+	//		metadataByline = value[0]
+	//		break
+	//	}
+	//}
 
 	// get description
-	metadataExcerpt := ""
-	possibleAttrNames = []string{
-		"dc:description",
-		"dcterm:description",
-		"og:description",
-		"weibo:article:description",
-		"weibo:webpage:description",
-		"description",
-		"twitter:description",
-	}
-	for _, name := range possibleAttrNames {
-		if value, ok := values[name]; ok && len(value) > 0 {
-			metadataExcerpt = value[0]
-			break
-		}
-	}
+	//metadataExcerpt := ""
+	//possibleAttrNames = []string{
+	//	"dc:description",
+	//	"dcterm:description",
+	//	"og:description",
+	//	"weibo:article:description",
+	//	"weibo:webpage:description",
+	//	"description",
+	//	"twitter:description",
+	//}
+	//for _, name := range possibleAttrNames {
+	//	if value, ok := values[name]; ok && len(value) > 0 {
+	//		metadataExcerpt = value[0]
+	//		break
+	//	}
+	//}
 
 	// get site name
-	var metadataSiteName string
-	if len(values["og:site_name"]) > 0 {
-		metadataSiteName = values["og:site_name"][0]
-	}
+	//var metadataSiteName string
+	//if len(values["og:site_name"]) > 0 {
+	//	metadataSiteName = values["og:site_name"][0]
+	//}
 
 	// get image thumbnail
-	metadataImage := ""
-	possibleAttrNames = []string{
-		"og:image",
-		"image",
-		"twitter:image",
+	//metadataImage := ""
+	//possibleAttrNames = []string{
+	//	"og:image",
+	//	"image",
+	//	"twitter:image",
+	//}
+	//for _, name := range possibleAttrNames {
+	//	if value, ok := values[name]; ok && len(value) > 0 {
+	//		metadataImage = ToAbsoluteURI(value[0], ps.documentURI)
+	//		break
+	//	}
+	//}
+
+	//values["image"] = []string{metadataImage}
+
+	// get favicon
+	if fav := ps.getArticleFavicon(); fav != "" {
+		metas["favicon"] = []string{fav}
 	}
-	for _, name := range possibleAttrNames {
-		if value, ok := values[name]; ok && len(value) > 0 {
-			metadataImage = ToAbsoluteURI(value[0], ps.documentURI)
-			break
+	// in some sites, excerpt is used with HTML encoding,
+	// so here we unescape it.
+	if _dt, ok := metas["excerpt"]; ok && len(_dt) > 0 {
+		for i, k := range metas["excerpt"] {
+			metas["excerpt"][i] = shtml.UnescapeString(k)
 		}
 	}
 
-	// get favicon
-	metadataFavicon := ps.getArticleFavicon()
-
-	// in some sites, excerpt is used with HTML encoding,
-	// so here we unescape it.
-	metadataExcerpt = shtml.UnescapeString(metadataExcerpt)
-
-	values["charset"] = []string{charset}
-	fmt.Println(values)
-	return map[string]string{
-		"title":    metadataTitle,
-		"byline":   metadataByline,
-		"excerpt":  metadataExcerpt,
-		"siteName": metadataSiteName,
-		"image":    metadataImage,
-		"favicon":  metadataFavicon,
-	}
+	return metas
 }
 
 // removeScripts removes script tags from the document.
@@ -1798,6 +1796,7 @@ func (ps *Parser) Parse(input io.Reader, pageURL string) *Article {
 	// Remove all style tags in head
 	nodes := getElementsByTagName(ps.doc, "body")
 	errors.T(len(nodes) == 0 || nodes[0] == nil, "body parse error")
+
 	ps.replaceBrs(nodes[0])
 	ps.replaceNodeTags(getElementsByTagName(ps.doc, "font"), "span")
 
@@ -1821,8 +1820,7 @@ func (ps *Parser) Parse(input io.Reader, pageURL string) *Article {
 
 	// Fetch metadata
 	metadata := ps.getArticleMetadata()
-	fmt.Println(metadata)
-	ps.articleTitle = metadata["title"]
+	ps.articleTitle = metadata["title"][0]
 
 	// Try to grab article content
 	finalHTMLContent := ""
@@ -1835,10 +1833,10 @@ func (ps *Parser) Parse(input io.Reader, pageURL string) *Article {
 		// If we haven't found an excerpt in the article's metadata,
 		// use the article's first paragraph as the excerpt. This is used
 		// for displaying a preview of the article's content.
-		if metadata["excerpt"] == "" {
+		if len(metadata["excerpt"]) == 0 {
 			paragraphs := getElementsByTagName(articleContent, "p")
 			if len(paragraphs) > 0 {
-				metadata["excerpt"] = strings.TrimSpace(textContent(paragraphs[0]))
+				metadata["excerpt"] = []string{strings.TrimSpace(textContent(paragraphs[0]))}
 			}
 		}
 
@@ -1846,24 +1844,26 @@ func (ps *Parser) Parse(input io.Reader, pageURL string) *Article {
 		finalHTMLContent = strings.TrimSpace(innerHTML(articleContent))
 	}
 
-	finalByline := metadata["byline"]
-	if finalByline == "" {
-		finalByline = ps.articleByline
+	if len(metadata["byline"]) == 0 {
+		metadata["byline"] = []string{ps.articleByline}
 	}
 
 	// Excerpt is an supposed to be short and concise,
 	// so it shouldn't have any new line
-	excerpt := strings.TrimSpace(metadata["excerpt"])
-	excerpt = strings.Join(strings.Fields(excerpt), " ")
+	//excerpt := strings.TrimSpace(metadata["excerpt"])
+	//excerpt = strings.Join(strings.Fields(excerpt), " ")
+
+	metadata["content"]=[]string{finalHTMLContent}
+	errors.P(metadata)
 
 	return &Article{
-		Title:    ps.articleTitle,
-		Byline:   finalByline,
-		Content:  finalHTMLContent,
-		Excerpt:  excerpt,
-		SiteName: metadata["siteName"],
-		Image:    metadata["image"],
-		Favicon:  metadata["favicon"],
+		//Title: ps.articleTitle,
+		//Byline:   finalByline,
+		//Content: finalHTMLContent,
+		//Excerpt:  excerpt,
+		//SiteName: metadata["siteName"],
+		//Image:    metadata["image"],
+		//Favicon:  metadata["favicon"],
 	}
 }
 
@@ -1881,9 +1881,8 @@ func (ps *Parser) Parse(input io.Reader, pageURL string) *Article {
 func (ps *Parser) getArticleFavicon() string {
 	favicon := ""
 	faviconSize := -1
-	linkElements := getElementsByTagName(ps.doc, "link")
 
-	ps.forEachNode(linkElements, func(link *html.Node, _ int) {
+	ps.forEachNode(getElementsByTagName(ps.doc, "link"), func(link *html.Node, _ int) {
 		linkRel := strings.TrimSpace(getAttribute(link, "rel"))
 		linkType := strings.TrimSpace(getAttribute(link, "type"))
 		linkHref := strings.TrimSpace(getAttribute(link, "href"))
