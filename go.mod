@@ -11,6 +11,7 @@ require (
 	github.com/pkg/profile v1.3.0
 	github.com/pubgo/errors v0.2.6
 	github.com/pubgo/gotask v0.0.10
+	github.com/rs/zerolog v1.14.3
 	github.com/sergi/go-diff v1.0.0
 	github.com/spf13/cobra v0.0.4
 	golang.org/x/arch v0.0.0-20190312162104-788fe5ffcd8c // indirect

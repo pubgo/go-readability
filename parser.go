@@ -78,23 +78,18 @@ type parseAttempt struct {
 
 // Article is the final readable content.
 type Article struct {
-	Title    string     `json:"title,omitempty"`
-	Byline   string     `json:"by_line,omitempty"`
-	Content  string     `json:"content,omitempty"`
-	Excerpt  string     `json:"excerpt,omitempty"`
-	SiteName string     `json:"site_name,omitempty"`
-	Image    string     `json:"image,omitempty"`
-	Favicon  string     `json:"favicon,omitempty"`
-}
-
-func (t *Article) Text() string {
-	return strings.TrimSpace(textContent(t.Node))
+	Title    string `json:"title,omitempty"`
+	Byline   string `json:"by_line,omitempty"`
+	Content  string `json:"content,omitempty"`
+	Excerpt  string `json:"excerpt,omitempty"`
+	SiteName string `json:"site_name,omitempty"`
+	Image    string `json:"image,omitempty"`
+	Favicon  string `json:"favicon,omitempty"`
 }
 
 func (t *Article) String() string {
 	defer errors.Handle()()
 
-	t.Node = nil
 	dt, err := json.Marshal(t)
 	errors.Wrap(err, "Article Marshal Error")
 	return string(dt)
@@ -163,6 +158,7 @@ func NewParser() *Parser {
 
 func (ps *Parser) free() {
 	defer errors.Handle()()
+	ps.doc = nil
 	_parserPool.Put(ps)
 }
 
@@ -424,9 +420,9 @@ func (ps *Parser) prepDocument() {
 	// Remove all style tags in head
 	ps.removeNodes(getElementsByTagName(doc, "style"), nil)
 
-	if nodes := getElementsByTagName(doc, "body"); len(nodes) > 0 && nodes[0] != nil {
-		ps.replaceBrs(nodes[0])
-	}
+	nodes := getElementsByTagName(doc, "body")
+	errors.T(len(nodes) > 0 || nodes[0] != nil, "body parse error")
+	ps.replaceBrs(nodes[0])
 
 	ps.replaceNodeTags(getElementsByTagName(doc, "font"), "span")
 }
@@ -1323,6 +1319,8 @@ func (ps *Parser) getArticleMetadata() map[string]string {
 	// so here we unescape it.
 	metadataExcerpt = shtml.UnescapeString(metadataExcerpt)
 
+	values["charset"] = []string{charset}
+	fmt.Println(values)
 	return map[string]string{
 		"title":    metadataTitle,
 		"byline":   metadataByline,
@@ -1782,6 +1780,33 @@ func (ps *Parser) isProbablyVisible(node *html.Node) bool {
 func (ps *Parser) Parse(input io.Reader, pageURL string) *Article {
 	defer errors.Handle()()
 
+	// Parse page url
+	var err error
+	ps.documentURI, err = url.ParseRequestURI(pageURL)
+	errors.Wrap(err, "failed to parse URL(%s)", pageURL)
+
+	// Parse input
+	ps.doc, err = html.Parse(input)
+	errors.Wrap(err, "failed to parse input to html")
+
+	// Remove script and style from the document.
+	ps.removeNodes(getElementsByTagName(ps.doc, "script"), nil)
+	ps.removeNodes(getElementsByTagName(ps.doc, "noscript"), nil)
+	ps.removeNodes(getElementsByTagName(ps.doc, "style"), nil)
+
+	// Prepares the HTML document
+	// Remove all style tags in head
+	nodes := getElementsByTagName(ps.doc, "body")
+	errors.T(len(nodes) == 0 || nodes[0] == nil, "body parse error")
+	ps.replaceBrs(nodes[0])
+	ps.replaceNodeTags(getElementsByTagName(ps.doc, "font"), "span")
+
+	// Avoid parsing too large documents, as per configuration option
+	if ps.MaxElemsToParse > 0 {
+		numTags := len(getElementsByTagName(ps.doc, "*"))
+		errors.T(numTags > ps.MaxElemsToParse, "documents too large: %d elements", numTags)
+	}
+
 	// Reset parser data
 	ps.articleTitle = ""
 	ps.articleByline = ""
@@ -1794,29 +1819,9 @@ func (ps *Parser) Parse(input io.Reader, pageURL string) *Article {
 		cleanConditionally: true,
 	}
 
-	// Parse page url
-	var err error
-	ps.documentURI, err = url.ParseRequestURI(pageURL)
-	errors.Wrap(err, "failed to parse URL(%s)", pageURL)
-
-	// Parse input
-	ps.doc, err = html.Parse(input)
-	errors.Wrap(err, "failed to parse input to html")
-
-	// Avoid parsing too large documents, as per configuration option
-	if ps.MaxElemsToParse > 0 {
-		numTags := len(getElementsByTagName(ps.doc, "*"))
-		errors.T(numTags > ps.MaxElemsToParse, "documents too large: %d elements", numTags)
-	}
-
-	// Remove script tags from the document.
-	ps.removeScripts(ps.doc)
-
-	// Prepares the HTML document
-	ps.prepDocument()
-
 	// Fetch metadata
 	metadata := ps.getArticleMetadata()
+	fmt.Println(metadata)
 	ps.articleTitle = metadata["title"]
 
 	// Try to grab article content
