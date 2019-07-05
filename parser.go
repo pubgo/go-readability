@@ -790,7 +790,7 @@ func (ps *Parser) grabArticle() *html.Node {
 			// content(e.g. text, image, video, or iframe).
 			switch nodeTagName {
 			case "div", "section", "header",
-				"h1", "h2", "h3", "h4", "h5", "h6" ,"li", "ul":
+				"h1", "h2", "h3", "h4", "h5", "h6", "li", "ul":
 				if ps.isElementWithoutContent(node) {
 					node = ps.removeAndGetNext(node)
 					continue
